@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Fraczilla</title>
+<meta name="description" content="Fraczilla: a GPU deep-zoom fractal explorer in the spirit of the legendary DOS fractal programs. Runs entirely in your browser.">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' fill='%230000aa'/><text x='16' y='25' font-size='24' text-anchor='middle' fill='%23ffff55' font-family='monospace'>Z</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="logo" class="hud">FRACZILLA</div>
+<button id="menuBtn" class="hud btn" title="Menu (Tab)">≡ MENU</button>
+
+<div id="status" class="hud">
+  <span id="stType">MANDELBROT</span>
+  <span>X <b id="stX">0</b></span>
+  <span>Y <b id="stY">0</b></span>
+  <span>ZOOM <b id="stZoom">1×</b></span>
+  <span>ITER <b id="stIter">0</b></span>
+  <span id="stFps">0 FPS</span>
+  <span id="stProg"></span>
+</div>
+
+<aside id="panel">
+  <div class="box">
+    <div class="box-title">FRACTAL TYPE</div>
+    <div id="formulas" class="btn-grid"></div>
+    <div class="row">
+      <button id="juliaBtn" class="btn wide" title="Space">MANDEL ⇄ JULIA <kbd>SPACE</kbd></button>
+    </div>
+    <div id="juliaRow" class="row hidden">
+      <label>JULIA C</label>
+      <select id="juliaSel"></select>
+    </div>
+    <div id="juliaC" class="small dim"></div>
+  </div>
+
+  <div class="box">
+    <div class="box-title">JOURNEYS</div>
+    <div id="locations" class="list"></div>
+    <div class="row">
+      <button id="autoBtn" class="btn wide" title="A">▶ AUTOPILOT DIVE <kbd>A</kbd></button>
+    </div>
+    <div class="row"><label>DIVE SPEED</label><input id="apSpeed" type="range" min="0.1" max="2" step="0.05" value="0.6"></div>
+    <div class="row"><label>FLIGHT SPEED</label><input id="flySpeed" type="range" min="0.3" max="4" step="0.1" value="1.4"></div>
+  </div>
+
+  <div class="box">
+    <div class="box-title">COLORS</div>
+    <div id="palettes" class="pal-grid"></div>
+    <div class="row">
+      <button id="randPal" class="btn" title="Shift+P">🎲 RANDOM</button>
+      <button id="cycleBtn" class="btn" title="C">⟳ CYCLE <kbd>C</kbd></button>
+      <button id="retroBtn" class="btn" title="R">RETRO</button>
+    </div>
+    <div class="row"><label>CYCLE SPEED</label><input id="cycleSpeed" type="range" min="-120" max="120" step="1" value="30"></div>
+    <div class="row"><label>DENSITY</label><input id="density" type="range" min="-4" max="4" step="0.01" value="0"></div>
+    <div class="row"><label>OFFSET</label><input id="offset" type="range" min="0" max="256" step="0.5" value="0"></div>
+    <div class="row"><label>MAPPING</label>
+      <select id="mapping"><option value="0">LINEAR</option><option value="1" selected>SQRT</option><option value="2">LOG</option></select>
+    </div>
+    <div class="row"><label>INSIDE</label>
+      <select id="inside"><option value="0">BLACK</option><option value="1">ZMAG</option></select>
+    </div>
+    <div class="row checks">
+      <label><input id="smooth" type="checkbox" checked> SMOOTH</label>
+      <label><input id="light" type="checkbox" checked> 3D LIGHT</label>
+    </div>
+    <div class="row"><label>LIGHT ANGLE</label><input id="lightAngle" type="range" min="0" max="360" step="1" value="45"></div>
+    <div class="row"><label>LIGHT DEPTH</label><input id="lightStr" type="range" min="0" max="1" step="0.01" value="0.55"></div>
+    <div class="row"><label>EDGE INK</label><input id="edge" type="range" min="0" max="1" step="0.01" value="0"></div>
+  </div>
+
+  <div class="box">
+    <div class="box-title">ITERATIONS</div>
+    <div class="row checks"><label><input id="iterAuto" type="checkbox" checked> AUTO (DEEPER = MORE)</label></div>
+    <div class="row"><label id="iterLabel">MAX ITER</label><input id="iter" type="range" min="1.7" max="5.3" step="0.01" value="3"></div>
+  </div>
+
+  <div class="box">
+    <div class="box-title">VIEW</div>
+    <div class="row checks"><label><input id="aa" type="checkbox" checked> ANTI-ALIAS WHEN STILL</label></div>
+    <div class="row">
+      <button id="saveBtn" class="btn" title="S">SAVE PNG <kbd>S</kbd></button>
+      <button id="linkBtn" class="btn" title="L">COPY LINK</button>
+    </div>
+    <div class="row">
+      <button id="resetBtn" class="btn" title="Home">RESET <kbd>HOME</kbd></button>
+      <button id="helpBtn" class="btn" title="H">HELP <kbd>H</kbd></button>
+    </div>
+  </div>
+  <div class="small dim center">TAB hides this panel</div>
+</aside>
+
+<div id="help" class="modal hidden">
+  <div class="box modal-box">
+    <div class="box-title">FRACZILLA — KEYS &amp; MOUSE</div>
+    <table>
+      <tr><td>WHEEL / PINCH</td><td>smooth zoom at cursor</td></tr>
+      <tr><td>DRAG</td><td>pan</td></tr>
+      <tr><td>DOUBLE-CLICK</td><td>zoom in 4× (SHIFT: out)</td></tr>
+      <tr><td>SPACE</td><td>Mandelbrot ⇄ Julia at the cursor</td></tr>
+      <tr><td>A</td><td>autopilot: endless dive toward detail</td></tr>
+      <tr><td>T</td><td>fly to the next journey destination</td></tr>
+      <tr><td>C</td><td>color cycling on/off</td></tr>
+      <tr><td>+ / −</td><td>cycling speed &amp; direction</td></tr>
+      <tr><td>P / SHIFT+P</td><td>next palette / random palette</td></tr>
+      <tr><td>[ / ]</td><td>color density</td></tr>
+      <tr><td>, / .</td><td>fewer / more iterations</td></tr>
+      <tr><td>F</td><td>next fractal type</td></tr>
+      <tr><td>B</td><td>smooth ⇄ banded colors</td></tr>
+      <tr><td>D</td><td>3D lighting on/off</td></tr>
+      <tr><td>R</td><td>retro mode (VGA palette, banded)</td></tr>
+      <tr><td>ARROWS, PGUP/PGDN</td><td>pan, zoom</td></tr>
+      <tr><td>S / L</td><td>save PNG / copy link to this view</td></tr>
+      <tr><td>HOME</td><td>reset view</td></tr>
+      <tr><td>TAB / H</td><td>toggle panel / this help</td></tr>
+    </table>
+    <p class="small dim">Deep zoom works by perturbation: one reference orbit is computed in arbitrary precision in a worker, and the GPU tracks every pixel as a tiny float offset from it. That's how it reaches 10<sup>30</sup>× magnification in real time.</p>
+    <div class="center"><button class="btn" id="helpClose">OK</button></div>
+  </div>
+</div>
+
+<div id="splash">
+  <pre class="splash-logo">
+ ███████╗██████╗  █████╗  ██████╗███████╗██╗██╗     ██╗      █████╗
+ ██╔════╝██╔══██╗██╔══██╗██╔════╝╚══███╔╝██║██║     ██║     ██╔══██╗
+ █████╗  ██████╔╝███████║██║       ███╔╝ ██║██║     ██║     ███████║
+ ██╔══╝  ██╔══██╗██╔══██║██║      ███╔╝  ██║██║     ██║     ██╔══██║
+ ██║     ██║  ██║██║  ██║╚██████╗███████╗██║███████╗███████╗██║  ██║
+ ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝╚══════╝╚══════╝╚═╝  ╚═╝</pre>
+  <div class="splash-sub">GPU DEEP-ZOOM FRACTAL MONSTER · 10<sup>30</sup>× · 100% IN YOUR BROWSER</div>
+  <div class="splash-hint">press any key · scroll to zoom · H for help</div>
+</div>
+
+<div id="toast"></div>
+<div id="error" class="modal hidden"><div class="box modal-box"><div class="box-title">ERROR</div><p id="errorMsg"></p></div></div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
