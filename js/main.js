@@ -887,7 +887,15 @@ function syncUI() {
 canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); fatal('The GPU context was lost (driver reset). Reload the page to continue.'); });
 
 // ---------------------------------------------------------------- boot
-if (!readHash()) setHome();
+// #fly=<journey> starts a flight from the overview, e.g. #fly=the-abyss
+const slug = (t) => t.toLowerCase().replace(/\(.*?\)/g, '').normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+const flyParam = new URLSearchParams(location.hash.slice(1)).get('fly');
+const flyLoc = flyParam && LOCATIONS.find((l) => slug(l.name) === slug(flyParam));
+if (flyLoc) {
+  S.f = FORMULAS.find((q) => q.id === flyLoc.f) || FORMULAS[0];
+  setHome();
+  setTimeout(() => { hideSplash(); goLocation(flyLoc); }, 1800);
+} else if (!readHash()) setHome();
 buildUI();
 R.uploadPalette(S.palData);
 syncUI();
