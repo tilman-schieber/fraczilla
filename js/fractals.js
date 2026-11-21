@@ -96,6 +96,21 @@ export const FRACTALS = [
     blurb: 'The cubic magnet formula: lumpier, with nested hearts.',
   },
   {
+    id: 'halley', name: 'HALLEY', family: 'roots', code: 111, degree: 2, ySign: 1,
+    home: ['0', '0', 1.4], julia: false,
+    blurb: "Halley's method on z⁵ − 1: Newton's sharper cousin, with jewelled basin borders.",
+  },
+  {
+    id: 'phoenix', name: 'PHOENIX', family: 'classic', code: 109, degree: 2, ySign: 1,
+    home: ['-0.35', '0', 1.0],
+    blurb: "z² + c − ½·z₋₁. Remembers its last step. Try JULIA at c = 0.5667 for the classic bird.",
+  },
+  {
+    id: 'manowar', name: 'MANOWAR', family: 'classic', code: 110, degree: 2, ySign: 1,
+    home: ['-0.05', '0', 0.3],
+    blurb: 'z² + z₋₁ + c. A Mandelbrot with trailing jellyfish tentacles.',
+  },
+  {
     id: 'spider', name: 'SPIDER', family: 'classic', code: 104, degree: 2, ySign: 1,
     home: ['-0.4', '0', 1.4], quick: true, julia: false,
     blurb: 'z = z² + c, c = c/2 + z. A Mandelbrot whose c wanders along.',
@@ -109,6 +124,16 @@ export const FRACTALS = [
     id: 'sine', name: 'SINE', family: 'classic', code: 106, degree: 2, ySign: 1,
     home: ['0', '0', 3.2],
     blurb: 'c·sin(z). Transcendental: an endless row of Mandelbrot-like bugs.',
+  },
+  {
+    id: 'cosine', name: 'COSINE', family: 'classic', code: 112, degree: 2, ySign: 1,
+    home: ['1.5', '0', 2.4],
+    blurb: 'cos(z) + c. A transcendental set that repeats every 2π along the real axis.',
+  },
+  {
+    id: 'exp', name: 'EXPONENTIAL', family: 'classic', code: 113, degree: 2, ySign: 1,
+    home: ['1', '0', 5],
+    blurb: 'c·eᶻ. Cantor bouquets: infinitely many hairs combed out to the right.',
   },
   {
     id: 'lyapunov', name: 'LYAPUNOV AB', family: 'beyond', code: 107, degree: 2, ySign: 1,

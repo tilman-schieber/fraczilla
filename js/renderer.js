@@ -140,6 +140,8 @@ const float PI = 3.14159265358979;
 vec2 cmul(vec2 a, vec2 b) { return vec2(a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x); }
 vec2 cdiv(vec2 a, vec2 b) { return vec2(a.x*b.x + a.y*b.y, a.y*b.x - a.x*b.y) / dot(b, b); }
 vec2 csin(vec2 z) { return vec2(sin(z.x)*cosh(z.y), cos(z.x)*sinh(z.y)); }
+vec2 ccos(vec2 z) { return vec2(cos(z.x)*cosh(z.y), -sin(z.x)*sinh(z.y)); }
+vec2 cexp(vec2 z) { return exp(z.x) * vec2(cos(z.y), sin(z.y)); }
 const vec2 ONE = vec2(1.0, 0.0);
 // smooth convergence count: 0..1 extra depending on how far below eps the last step went
 float conv(int i, float step, float eps) { return float(i) + 1.0 - clamp(log2(log(max(step, 1e-30)) / log(eps)), 0.0, 1.0); }
@@ -218,6 +220,51 @@ void main() {
   for (int i = 0; i < uMaxIter; i++) {
     z = cmul(c, csin(z));
     if (abs(z.y) > 50.0) { o = vec4(float(i) + 1.0 - clamp(log2(abs(z.y) / 50.0) / 5.0, 0.0, 1.0), 0.0, 0.0, 0.0); return; }
+  }
+#elif FORMULA == 109
+  // Phoenix: z' = z^2 + c + p·z_prev with p = -0.5 (Julia mode: the classic Phoenix at c = 0.5667)
+  vec2 c = julia ? uJC : pt, z = julia ? pt : vec2(0.0), zp = vec2(0.0);
+  for (int i = 0; i < uMaxIter; i++) {
+    vec2 nz = cmul(z, z) + c - 0.5*zp;
+    zp = z; z = nz;
+    if (dot(z, z) > uBail2) { o = vec4(esc(i, z, 2.0), 0.0, 0.0, 0.0); return; }
+  }
+#elif FORMULA == 110
+  // Manowar: z' = z^2 + z_prev + c, starting from z = z_prev = 0
+  vec2 c = julia ? uJC : pt, z = julia ? pt : vec2(0.0), zp = z;
+  for (int i = 0; i < uMaxIter; i++) {
+    vec2 nz = cmul(z, z) + zp + c;
+    zp = z; z = nz;
+    if (dot(z, z) > uBail2) { o = vec4(esc(i, z, 2.0), 0.0, 0.0, 0.0); return; }
+  }
+#elif FORMULA == 111
+  // Halley's method for z^5 - 1: z -= 2ff' / (2f'^2 - ff''); five basins
+  vec2 z = pt;
+  for (int i = 0; i < uMaxIter; i++) {
+    vec2 z2 = cmul(z, z), z3 = cmul(z2, z), z4 = cmul(z2, z2);
+    vec2 f = cmul(z4, z) - ONE, f1 = 5.0*z4, f2 = 20.0*z3;
+    vec2 dz = cdiv(2.0*cmul(f, f1), 2.0*cmul(f1, f1) - cmul(f, f2));
+    z -= dz;
+    float st = length(dz);
+    if (st < 1e-5) {
+      float root = mod(floor(atan(z.y, z.x) / (2.0*PI/5.0) + 0.5) + 5.0, 5.0);
+      o = vec4(conv(i, st, 1e-5), 0.0, 0.0, 10.0 + root*0.6); // 0.6 = 3/5: spread over the palette
+      return;
+    }
+  }
+#elif FORMULA == 112
+  // cos(z) + c from the critical point 0; escapes when |Im z| gets large
+  vec2 c = julia ? uJC : pt, z = julia ? pt : vec2(0.0);
+  for (int i = 0; i < uMaxIter; i++) {
+    z = ccos(z) + c;
+    if (abs(z.y) > 50.0) { o = vec4(float(i) + 1.0 - clamp(log2(abs(z.y) / 50.0) / 5.0, 0.0, 1.0), 0.0, 0.0, 0.0); return; }
+  }
+#elif FORMULA == 113
+  // c·exp(z) from the asymptotic value 0; escapes when Re z gets large
+  vec2 c = julia ? uJC : pt, z = julia ? pt : vec2(0.0);
+  for (int i = 0; i < uMaxIter; i++) {
+    z = cmul(c, cexp(z));
+    if (z.x > 50.0) { o = vec4(float(i) + 1.0 - clamp(log2(z.x / 50.0) / 5.0, 0.0, 1.0), 0.0, 0.0, 0.0); return; }
   }
 #elif FORMULA == 107
   // Lyapunov exponent of the logistic map, forcing sequence of a (bit 0) and b (bit 1)
