@@ -1,10 +1,10 @@
-import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=3947e2ef';
-import { PALETTES, randomPalette } from './palettes.js?v=3947e2ef';
-import { LOCATIONS, START } from './locations.js?v=3947e2ef';
-import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=3947e2ef';
-import { FRACTALS, FAMILIES } from './fractals.js?v=3947e2ef';
-import { muxWebM } from './webm.js?v=3947e2ef';
-import { asciiLogoSVG } from './logo.js?v=3947e2ef';
+import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=de6d48d2';
+import { PALETTES, randomPalette } from './palettes.js?v=de6d48d2';
+import { LOCATIONS, START } from './locations.js?v=de6d48d2';
+import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=de6d48d2';
+import { FRACTALS, FAMILIES } from './fractals.js?v=de6d48d2';
+import { muxWebM } from './webm.js?v=de6d48d2';
+import { asciiLogoSVG } from './logo.js?v=de6d48d2';
 
 const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
@@ -62,7 +62,7 @@ function maxIter() {
 let worker, ref = null, pend = null, reqId = 0;
 function startWorker() {
   if (worker) worker.terminate();
-  worker = new Worker(new URL('./refworker.js?v=3947e2ef', import.meta.url));
+  worker = new Worker(new URL('./refworker.js?v=de6d48d2', import.meta.url));
   worker.onmessage = (e) => {
     const m = e.data;
     if (!pend || m.id !== pend.id) return;
@@ -334,6 +334,7 @@ function animate(dt) {
   }
   if (anim.flight) { stepFlight(dt); moved = true; }
   stepLook(dt);
+  stepTour();
   if (moved) invalidate(true);
 }
 
@@ -341,7 +342,7 @@ function stopMotion() {
   anim.zoom = 0; anim.vx = anim.vy = 0; anim.flight = null;
 }
 
-function flyTo(x, y, s) {
+function flyTo(x, y, s, speed = S.flySpeed) {
   stopMotion();
   const dx = toDouble(x - S.cx), dy = toDouble(y - S.cy);
   const u1 = Math.hypot(dx, dy), w0 = S.scale, w1 = s, rho = 1.5;
@@ -357,7 +358,7 @@ function flyTo(x, y, s) {
     f.r0 = -Math.asinh(b0); f.r1 = -Math.asinh(b1);
     f.S = (f.r1 - f.r0) / rho;
   }
-  f.T = Math.max(0.9, f.S / S.flySpeed);
+  f.T = Math.max(0.9, f.S / speed);
   anim.flight = f;
 }
 
@@ -385,6 +386,87 @@ function stepFlight(dt) {
     const rem = k * Math.cosh(f.r0) * Math.sinh(f.rho * (f.S - s)) / (Math.cosh(f.rho * f.S + f.r0) * Math.cosh(A));
     S.cx = f.tx - fromDouble(f.dirx * rem); S.cy = f.ty - fromDouble(f.diry * rem);
   }
+}
+
+// ---------------------------------------------------------------- tour
+// A: a lean-back show. Flies from curated spot to curated spot across all types,
+// waits for the full-quality render, holds, and moves on. Any navigation stops it.
+const TOUR_HOLD = 6000, TOUR_MAX_WAIT = 25000;
+// keys that only change the look keep the tour running
+const TOUR_KEEPS = new Set(['a', 'A', 'Tab', 'h', 'H', 'F1', '?', 'c', 'C', '+', '=', '-', '_', 'p', 'P', '[', ']', 'b', 'B', 'd', 'D', 'r', 'R', 'j', 'J', 'l', 'L', 'Shift']);
+const tour = { on: false, list: [], next: null, phase: 'idle', t0: 0, settledAt: 0, saved: null };
+const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
+// up to two spots per type, types in random order (never the type we are on first)
+function tourPlaylist() {
+  const byType = new Map();
+  for (const l of LOCATIONS) {
+    if (l.f === 'plasma' || l.name.startsWith('The Whole')) continue;
+    if (!byType.has(l.f)) byType.set(l.f, []);
+    byType.get(l.f).push(l);
+  }
+  const types = shuffle([...byType.keys()]);
+  if (types[0] === S.f.id && types.length > 1) types.push(types.shift());
+  return types.flatMap((t) => shuffle(byType.get(t)).slice(0, 2));
+}
+const tourSettled = () => (!S.f.deep || (ref && ref.key === refKey())) && !pend && lowVer === viewVer && fullVer === viewVer && fullDone >= R.full.h;
+// a different type or Julia set than the one on screen
+const tourCut = (l) => l.f !== S.f.id || (l.jx != null) !== S.julia || (l.jx != null && (parseFixed(l.jx) !== S.jx || parseFixed(l.jy) !== S.jy));
+function startTour() {
+  if (hq) return;
+  hideSplash(); closeRender(); $('#help').classList.add('hidden');
+  tour.on = true; tour.list = tourPlaylist();
+  tour.saved = { cycling: S.cycling, panelClosed: $('#panel').classList.contains('closed') };
+  S.cycling = true;
+  $('#panel').classList.add('closed');
+  toast('TOUR: sit back. Any zoom, drag or key ends it');
+  tourAdvance();
+  syncUI();
+}
+function stopTour() {
+  if (!tour.on) return;
+  tour.on = false; tour.phase = 'idle';
+  S.cycling = tour.saved.cycling;
+  $('#panel').classList.toggle('closed', tour.saved.panelClosed);
+  showCaption(null);
+  toast('TOUR ENDED');
+  syncUI();
+}
+function tourAdvance() {
+  if (!tour.list.length) tour.list = tourPlaylist();
+  tour.next = tour.list.shift();
+  showCaption(null);
+  const h = S.julia ? juliaHome() : { x: parseFixed(S.f.home[0]), y: parseFixed(S.f.home[1]), s: S.f.home[2] };
+  if (tourCut(tour.next) && S.scale < h.s * 0.5) {
+    // pull back to the overview first, so the cut to the next type happens from afar
+    tour.phase = 'out';
+    flyTo(h.x, h.y, h.s, S.flySpeed * 2.5);
+  } else tourGo();
+}
+function tourGo() {
+  tour.phase = 'fly';
+  goLocation(tour.next, false, true);
+}
+function stepTour() {
+  if (!tour.on || hq || anim.flight) return;
+  const now = performance.now();
+  if (tour.phase === 'out') { tourGo(); return; }
+  if (tour.phase === 'fly') {
+    tour.phase = 'hold'; tour.t0 = now; tour.settledAt = 0;
+    const l = tour.next;
+    showCaption(l.name, l.jx != null ? `${S.f.name} · JULIA SET` : S.f.name);
+    return;
+  }
+  if (tour.phase === 'hold') {
+    if (!tour.settledAt && tourSettled()) tour.settledAt = now;
+    if ((tour.settledAt && now - tour.settledAt > TOUR_HOLD) || now - tour.t0 > TOUR_MAX_WAIT) tourAdvance();
+  }
+}
+function showCaption(title, sub) {
+  const c = $('#caption');
+  if (!title) { c.classList.remove('show'); return; }
+  c.querySelector('b').textContent = title.toUpperCase();
+  c.querySelector('span').textContent = sub || '';
+  c.classList.add('show');
 }
 
 // ---------------------------------------------------------------- actions
@@ -440,6 +522,7 @@ function stepLook(dt) {
 }
 
 function toggleJulia(px, py) {
+  stopTour();
   if (S.f.julia === false && !S.julia) { toast(`${S.f.name} HAS NO JULIA MODE`); return; }
   stopMotion();
   if (!S.julia) {
@@ -466,8 +549,9 @@ function setJulia(jx, jy) {
 let locIdx = 0;
 
 // Fly to a journey destination (or prerender the flight as a video when render is set).
-function goLocation(loc, render = false) {
-  const go = (t) => (render ? prerenderJourney(t) : startJourney(t));
+function goLocation(loc, render = false, fromTour = false) {
+  if (!fromTour) stopTour();
+  const go = (t) => (render ? prerenderJourney(t) : fromTour ? flyTo(t.cx, t.cy, t.s) : startJourney(t));
   if (loc.inJulia) { go({ name: loc.name, cx: loc.cx, cy: loc.cy, s: loc.s }); return; }
   const f = FORMULAS.find((q) => q.id === loc.f) || FORMULAS[0];
   if (loc.jx != null) {
@@ -532,7 +616,7 @@ function toggleRetro() {
 }
 
 function resetView() {
-  stopMotion();
+  stopTour(); stopMotion();
   if (S.julia) setHome(); else setHome();
   invalidate(false);
 }
@@ -576,6 +660,7 @@ const pointers = new Map();
 let mouse = null, lastMoveT = 0;
 
 canvas.addEventListener('pointerdown', (e) => {
+  stopTour();
   if (hq) { cancelHQ(); return; }
   hideSplash();
   canvas.setPointerCapture(e.pointerId);
@@ -622,6 +707,7 @@ canvas.addEventListener('pointerleave', () => { if (!pointers.size) mouse = null
 
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
+  stopTour();
   if (hq) { cancelHQ(); return; }
   hideSplash();
   let d = e.deltaY;
@@ -632,6 +718,7 @@ canvas.addEventListener('wheel', (e) => {
 }, { passive: false });
 
 canvas.addEventListener('dblclick', (e) => {
+  stopTour();
   anim.flight = null;
   anim.zoom += e.shiftKey ? Math.log(4) : -Math.log(4);
   anim.ax = e.offsetX; anim.ay = e.offsetY;
@@ -648,14 +735,16 @@ window.addEventListener('keydown', (e) => {
   if (e.ctrlKey || e.metaKey || e.altKey) return;
   const k = e.key;
   const handled = () => e.preventDefault();
+  if (tour.on && !TOUR_KEEPS.has(k)) stopTour();
   if (!$('#help').classList.contains('hidden') && (k === 'Escape' || k === 'h' || k === 'H' || k === 'Enter' || k === 'F1' || k === '?')) {
     $('#help').classList.add('hidden'); return handled();
   }
   switch (k) {
     case ' ': toggleJulia(mouse?.x, mouse?.y); break;
     case 'j': case 'J': setJuliaPreview(!jpv.on); break;
+    case 'a': case 'A': tour.on ? stopTour() : startTour(); break;
     case 't': case 'T': { const js = currentJourneys(); goLocation(js[(locIdx = (locIdx + 1) % js.length)]); } break;
-    case 'c': case 'C': S.cycling = !S.cycling; toast(S.cycling ? 'COLOR CYCLING ON (+/− speed)' : 'COLOR CYCLING OFF'); syncUI(); break;
+    case 'c': case 'C': S.cycling = !S.cycling; if (tour.on) tour.saved.cycling = S.cycling; toast(S.cycling ? 'COLOR CYCLING ON (+/− speed)' : 'COLOR CYCLING OFF'); syncUI(); break;
     case '+': case '=': S.cycleSpeed = Math.min(120, S.cycleSpeed + 10); S.cycling = true; toast(`CYCLE SPEED ${S.cycleSpeed}`); syncUI(); break;
     case '-': case '_': S.cycleSpeed = Math.max(-120, S.cycleSpeed - 10); S.cycling = true; toast(`CYCLE SPEED ${S.cycleSpeed}`); syncUI(); break;
     case 'p': setPalette((Math.max(0, S.pal) + 1) % PALETTES.length); toast(`PALETTE: ${PALETTES[S.pal].name.toUpperCase()}`); break;
@@ -778,7 +867,7 @@ function buildUI() {
       else if (e.key === 'Escape') { e.target.blur(); $('#jcRow').classList.add('hidden'); syncUI(); }
     });
   }
-  $('#juliaBtn').onclick = () => toggleJulia(null);
+  $('#juliaBtn').onclick = () => { toggleJulia(null); phoneClosePanel(); };
   $('#jpvBtn').onclick = () => setJuliaPreview(!jpv.on);
 
   const pwrap = $('#palettes');
@@ -824,6 +913,10 @@ function buildUI() {
   $('#renderImage').onclick = renderImage;
   $('#renderSaveVideo').onclick = saveVideo;
   $('#shareBtn').onclick = shareJourney;
+  const fine = $('#fine');
+  try { fine.open = localStorage.getItem('fraczilla.fine') === '1'; } catch {}
+  fine.addEventListener('toggle', () => { try { localStorage.setItem('fraczilla.fine', fine.open ? '1' : '0'); } catch {} });
+  $('#tourBtn').onclick = () => (tour.on ? stopTour() : startTour());
   $('#videoBtn').onclick = saveVideo;
   $('#hqCancel').onclick = cancelHQ;
   movieVideo.onclick = cancelHQ;
@@ -846,7 +939,7 @@ function buildUI() {
   $('#helpClose').onclick = () => $('#help').classList.add('hidden');
   $('#help').onclick = (e) => { if (e.target.id === 'help') $('#help').classList.add('hidden'); };
   $('#menuBtn').onclick = () => $('#panel').classList.toggle('closed');
-  if (window.innerWidth < 700) $('#panel').classList.add('closed');
+  if (phone()) $('#panel').classList.add('closed');
 }
 
 let shownLocKey = '';
@@ -901,12 +994,14 @@ function buildLocations() {
     if (loc.jx != null) b.title = `Julia set, c = ${loc.jx} ${loc.jy.startsWith('-') ? '−' : '+'} ${loc.jy.replace('-', '')}i`;
     if (here) b.classList.add('here');
     if (loc.name === 'Mirror of c') b.title = 'Near z = c, a Julia set echoes the Mandelbrot set around c';
-    b.onclick = () => { locIdx = i; goLocation(loc); };
+    b.onclick = () => { locIdx = i; goLocation(loc); phoneClosePanel(); };
     lwrap.appendChild(b);
   });
 }
 
 function syncUI() {
+  $('#tourBtn').classList.toggle('on', tour.on);
+  $('#tourBtn').firstChild.textContent = tour.on ? '■ STOP TOUR ' : '▶ TOUR ';
   buildLocations();
   document.querySelectorAll('#formulas .btn').forEach((b) => b.classList.toggle('on', b.dataset.id === S.f.id || (b.classList.contains('more') && !S.f.quick)));
   const fam = FAMILIES.find((q) => q.id === S.f.family);
@@ -916,7 +1011,7 @@ function syncUI() {
   $('#jpvBtn').classList.toggle('on', jpv.on);
   $('#jpvBtn').disabled = S.f.julia === false;
   const jc = $('#juliaC');
-  jc.textContent = S.julia ? `c = ${fmtC(S.jx, S.jy, 8)}  ✎` : (S.f.julia === false ? '' : 'SPACE over any point opens its Julia set');
+  jc.textContent = S.julia ? `c = ${fmtC(S.jx, S.jy, 8)}  ✎` : (S.f.julia === false ? '' : matchMedia('(pointer: coarse)').matches ? 'MANDEL ⇄ JULIA opens the Julia set at the centre' : 'SPACE over any point opens its Julia set');
   jc.classList.toggle('editable', S.julia);
   jc.title = S.julia ? 'Click to type a different c' : '';
   if (!S.julia) $('#jcRow').classList.add('hidden');
@@ -1269,6 +1364,7 @@ function endOutput(f) {
 const renderDlg = $('#renderDlg'), frameBox = $('#frameBox');
 const renderOpen = () => !renderDlg.classList.contains('hidden');
 function openRender() {
+  stopTour();
   const sel = $('#outSel');
   sel.innerHTML = '';
   for (const q of OUTS) {
@@ -1379,7 +1475,7 @@ const typesOpen = () => !typeDlg.classList.contains('hidden');
 const visibleCards = () => [...typeDlg.querySelectorAll('.type-card')].filter((c) => !c.classList.contains('hidden'));
 
 function openTypes() {
-  hideSplash();
+  hideSplash(); stopTour();
   typeDlg.classList.remove('hidden');
   typeSearch.value = '';
   filterTypes();
@@ -1387,12 +1483,15 @@ function openTypes() {
   typeSearch.focus();
   renderThumbs();
 }
+// on a phone the open panel covers the picture: get out of the way once something was chosen
+const phone = () => window.innerWidth < 700;
+function phoneClosePanel() { if (phone()) $('#panel').classList.add('closed'); }
 function closeTypes() {
   typeDlg.classList.add('hidden');
   canvas.focus?.();
 }
 function pickType(f) {
-  closeTypes();
+  closeTypes(); phoneClosePanel();
   setFormula(f);
   toast(f.name);
 }
@@ -1445,7 +1544,7 @@ function typeKeys(e) {
 }
 
 function thumbOrbit(f, maxIter) {
-  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=3947e2ef', import.meta.url));
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=de6d48d2', import.meta.url));
   return new Promise((resolve) => {
     const id = Math.random();
     thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };
@@ -1463,7 +1562,7 @@ let picWorker = null;
 const picWait = new Map();
 function picOrbit(f, julia, cx, cy, jx, jy, F, maxIter) {
   if (!picWorker) {
-    picWorker = new Worker(new URL('./refworker.js?v=3947e2ef', import.meta.url));
+    picWorker = new Worker(new URL('./refworker.js?v=de6d48d2', import.meta.url));
     picWorker.onmessage = (e) => { const r = picWait.get(e.data.id); if (r) { picWait.delete(e.data.id); r(e.data); } };
   }
   return new Promise((resolve) => {
@@ -1510,7 +1609,7 @@ function hideJuliaPreview() {
   jpv.el.classList.add('hidden'); jpv.shown = false; jpv.key = '';
 }
 function stepJuliaPreview() {
-  if (!jpv.on || !mouse || S.julia || S.f.julia === false || pointers.size || anim.flight ||
+  if (!jpv.on || !mouse || S.julia || S.f.julia === false || pointers.size || anim.flight || tour.on ||
       typesOpen() || hq || renderOpen() || !$('#help').classList.contains('hidden')) { hideJuliaPreview(); return; }
   const W = jpv.el.offsetWidth || 256, H = jpv.el.offsetHeight || 210;
   let x = mouse.x + 28, y = mouse.y + 28;
@@ -1599,6 +1698,10 @@ if (flyLoc) {
   S.f = FORMULAS.find((q) => q.id === flyLoc.f) || FORMULAS[0];
   setHome();
   setTimeout(() => { hideSplash(); goLocation(flyLoc); }, 1800);
+} else if (new URLSearchParams(location.hash.slice(1)).get('tour') === '1') {
+  // kiosk / screensaver link: #tour=1
+  setHome();
+  setTimeout(startTour, 1800);
 } else if (new URLSearchParams(location.hash.slice(1)).get('dive') === '1' && readHash()) {
   // shared dive: start at the overview and journey to the linked view
   const t = { name: 'shared dive', cx: S.cx, cy: S.cy, s: S.scale };

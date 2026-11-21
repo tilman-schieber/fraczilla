@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=3947e2ef">
+<link rel="stylesheet" href="css/style.css?v=de6d48d2">
 </head>
 <body>
 <canvas id="c"></canvas>
@@ -51,6 +51,7 @@
   <div class="box">
     <div class="box-title">JOURNEYS</div>
     <div id="locations" class="list"></div>
+    <div class="row"><button id="tourBtn" class="btn wide" title="A: a lean-back tour of the best spots of every type">▶ TOUR <kbd>A</kbd></button></div>
     <div class="row"><button id="renderBtn" class="btn wide" title="V: render a full-quality video or image at a chosen size">🎬 RENDER VIDEO / IMAGE <kbd>V</kbd></button></div>
     <div class="row">
       <button id="shareBtn" class="btn wide" title="Copy a link that replays a dive to this view">🔗 SHARE DIVE TO HERE</button>
@@ -69,6 +70,10 @@
     </div>
     <div class="row"><label>CYCLE SPEED</label><input id="cycleSpeed" type="range" min="-120" max="120" step="1" value="30"></div>
     <div class="row"><label>DENSITY</label><input id="density" type="range" min="-4" max="4" step="0.01" value="0"></div>
+  </div>
+
+  <details id="fine" class="box">
+    <summary class="box-title">FINE-TUNING</summary>
     <div class="row"><label>OFFSET</label><input id="offset" type="range" min="0" max="256" step="0.5" value="0"></div>
     <div class="row"><label>MAPPING</label>
       <select id="mapping"><option value="0">LINEAR</option><option value="1" selected>SQRT</option><option value="2">LOG</option></select>
@@ -83,17 +88,13 @@
     <div class="row"><label>LIGHT ANGLE</label><input id="lightAngle" type="range" min="0" max="360" step="1" value="45"></div>
     <div class="row"><label>LIGHT DEPTH</label><input id="lightStr" type="range" min="0" max="1" step="0.01" value="0.55"></div>
     <div class="row"><label>EDGE INK</label><input id="edge" type="range" min="0" max="1" step="0.01" value="0"></div>
-  </div>
-
-  <div class="box">
-    <div class="box-title">ITERATIONS</div>
-    <div class="row checks"><label><input id="iterAuto" type="checkbox" checked> AUTO (DEEPER = MORE)</label></div>
+    <div class="row checks"><label><input id="iterAuto" type="checkbox" checked> AUTO ITERATIONS (DEEPER = MORE)</label></div>
     <div class="row"><label id="iterLabel">MAX ITER</label><input id="iter" type="range" min="1.7" max="5.3" step="0.01" value="3"></div>
-  </div>
+    <div class="row checks"><label><input id="aa" type="checkbox" checked> ANTI-ALIAS WHEN STILL</label></div>
+  </details>
 
   <div class="box">
     <div class="box-title">VIEW</div>
-    <div class="row checks"><label><input id="aa" type="checkbox" checked> ANTI-ALIAS WHEN STILL</label></div>
     <div class="row">
       <button id="linkBtn" class="btn wide" title="L">COPY LINK <kbd>L</kbd></button>
     </div>
@@ -114,6 +115,7 @@
       <tr><td>DOUBLE-CLICK</td><td>zoom in 4× (SHIFT: out)</td></tr>
       <tr><td>SPACE</td><td>Mandelbrot ⇄ Julia at the cursor</td></tr>
       <tr><td>J</td><td>live Julia preview of the point under the mouse</td></tr>
+      <tr><td>A</td><td>tour: a lean-back show of the best spots (any zoom or drag ends it)</td></tr>
       <tr><td>T</td><td>fly to the next journey destination</td></tr>
       <tr><td>C</td><td>color cycling on/off</td></tr>
       <tr><td>+ / −</td><td>cycling speed &amp; direction</td></tr>
@@ -138,7 +140,7 @@
 <div id="splash">
   <div class="splash-logo" id="splashLogo"></div>
   <div class="splash-sub">GPU DEEP-ZOOM FRACTAL MONSTER · 10<sup>30</sup>× · 100% IN YOUR BROWSER</div>
-  <div class="splash-hint">press any key · scroll to zoom · H for help</div>
+  <div class="splash-hint">press any key · scroll to zoom · A for a tour · H for help</div>
 </div>
 
 <div id="typeDlg" class="modal hidden" role="dialog" aria-label="Select a fractal type">
@@ -184,8 +186,9 @@
 </div>
 
 <div id="toast"></div>
+<div id="caption" aria-live="polite"><b></b><span></span></div>
 <div id="error" class="modal hidden"><div class="box modal-box"><div class="box-title">ERROR</div><p id="errorMsg"></p></div></div>
 
-<script type="module" src="js/main.js?v=3947e2ef"></script>
+<script type="module" src="js/main.js?v=de6d48d2"></script>
 </body>
 </html>

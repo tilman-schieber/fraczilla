@@ -71,6 +71,13 @@ canvas#movie { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 1
   position: absolute; top: -13px; left: 50%; transform: translateX(-50%);
   background: var(--blue); color: var(--yellow); padding: 0 8px; white-space: nowrap;
 }
+/* FINE-TUNING: expert controls, folded away by default */
+details.box > summary { cursor: pointer; list-style: none; }
+details.box > summary::-webkit-details-marker { display: none; }
+details.box > summary::before { content: '▸ '; }
+details.box[open] > summary::before { content: '▾ '; }
+details.box:not([open]) { padding-top: 6px; padding-bottom: 0; }
+details.box > summary:hover { color: var(--white); }
 .row { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
 .row > label:first-child { width: 112px; color: var(--cyan); flex: none; }
 .row.checks label { width: auto; color: var(--white); display: flex; align-items: center; gap: 6px; cursor: pointer; }
@@ -201,6 +208,16 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 18px; background: var
   overflow: hidden; text-overflow: ellipsis;
 }
 #toast.show { opacity: 1; }
+
+/* tour: museum-style label of the spot on show */
+#caption {
+  position: fixed; z-index: 3; left: 20px; bottom: 52px; pointer-events: none;
+  display: flex; flex-direction: column; opacity: 0; transform: translateY(8px);
+  transition: opacity .8s, transform .8s; text-shadow: 3px 3px 0 rgba(0, 0, 0, .75);
+}
+#caption.show { opacity: 1; transform: none; }
+#caption b { color: var(--yellow); font-weight: normal; font-size: clamp(30px, 4.5vw, 56px); line-height: 1; }
+#caption span { color: var(--cyan); font-size: clamp(18px, 2vw, 26px); }
 
 @media (max-width: 640px) {
   html, body { font-size: 18px; }
