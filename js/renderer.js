@@ -294,6 +294,210 @@ void main() {
 #endif
 }`;
 
+// Double-float version of the float formulas: every coordinate is an unevaluated sum
+// hi + lo of two float32s (~48 bits), which takes these types from ~10^5x to ~10^11x.
+// Used only when the view is deep enough to need it, since it costs several times more.
+// Complex numbers are vec4(re.hi, re.lo, im.hi, im.lo).
+const shallowDF = (formula) => `#version 300 es
+precision highp float; precision highp int;
+#define FORMULA ${formula}
+uniform vec2 uRes, uCenter, uCenterLo, uJC;
+uniform float uPix, uYSign, uBail2, uOne;
+uniform int uMaxIter, uJulia, uSeq, uSeqLen;
+out vec4 o;
+const float PI = 3.14159265358979;
+// --- double-float arithmetic. Each rounded result is multiplied by uOne (1.0, unknown at
+// compile time), or the compiler simplifies (a + b) - a to b and the error terms vanish.
+vec2 two(float a, float b) {
+  float s = (a + b) * uOne, v = (s - a) * uOne, w = (s - v) * uOne;
+  return vec2(s, (a - w) + (b - v));
+}
+vec2 qtwo(float a, float b) { float s = (a + b) * uOne; return vec2(s, b - (s - a) * uOne); }
+vec2 split(float a) { float h = uintBitsToFloat(floatBitsToUint(a) & 0xFFFFF000u); return vec2(h, a - h); }
+vec2 prod(float a, float b) {
+  float p = (a * b) * uOne; vec2 A = split(a), B = split(b);
+  return vec2(p, (((A.x*B.x - p) * uOne + A.x*B.y) * uOne + A.y*B.x) * uOne + A.y*B.y);
+}
+vec2 dadd(vec2 a, vec2 b) { vec2 s = two(a.x, b.x); s.y += a.y + b.y; return qtwo(s.x, s.y); }
+vec2 dsub(vec2 a, vec2 b) { return dadd(a, -b); }
+vec2 dmul(vec2 a, vec2 b) { vec2 p = prod(a.x, b.x); p.y += a.x*b.y + a.y*b.x; return qtwo(p.x, p.y); }
+vec2 dmulf(vec2 a, float b) { b *= uOne; vec2 p = prod(a.x, b); p.y += a.y*b; return qtwo(p.x, p.y); }
+vec2 ddivf(vec2 a, float b) { b *= uOne; float q = a.x / b; vec2 r = dsub(a, prod(q, b)); return qtwo(q, r.x / b); }
+vec2 ddiv(vec2 a, vec2 b) { float q = a.x / b.x; vec2 r = dsub(a, dmulf(b, q)); return qtwo(q, r.x / b.x); }
+// --- complex double-float
+#define CF(x, y) vec4(x, 0.0, y, 0.0)
+vec2 hi(vec4 z) { return z.xz; }
+vec4 cadd(vec4 a, vec4 b) { return vec4(dadd(a.xy, b.xy), dadd(a.zw, b.zw)); }
+vec4 csub(vec4 a, vec4 b) { return vec4(dsub(a.xy, b.xy), dsub(a.zw, b.zw)); }
+vec4 cmul(vec4 a, vec4 b) { return vec4(dsub(dmul(a.xy, b.xy), dmul(a.zw, b.zw)), dadd(dmul(a.xy, b.zw), dmul(a.zw, b.xy))); }
+vec4 csq(vec4 a) { return vec4(dsub(dmul(a.xy, a.xy), dmul(a.zw, a.zw)), 2.0*dmul(a.xy, a.zw)); }
+vec4 cscale(vec4 a, float f) { return vec4(dmulf(a.xy, f), dmulf(a.zw, f)); }
+vec4 cdiv(vec4 a, vec4 b) {
+  vec2 d = dadd(dmul(b.xy, b.xy), dmul(b.zw, b.zw));
+  return vec4(ddiv(dadd(dmul(a.xy, b.xy), dmul(a.zw, b.zw)), d), ddiv(dsub(dmul(a.zw, b.xy), dmul(a.xy, b.zw)), d));
+}
+// literal constants also go through uOne: the driver mis-folds df operations on them
+#define D1 vec2(uOne, 0.0)
+#define ONE vec4(uOne, 0.0, 0.0, 0.0)
+// --- transcendentals: e^a (and e^a - 1 without cancellation), sin and cos
+#define LN2 (uOne * vec2(0.693147182, -1.90465421e-9))
+#define TWOPI (uOne * vec2(6.28318548, -1.74845553e-7))
+vec2 dexp(vec2 a, out vec2 em1) {
+  float k = floor(a.x / LN2.x + 0.5);
+  vec2 r = 0.00390625 * dsub(a, dmulf(LN2, k)); // |r| < 0.0014
+  vec2 t = r, s = r;
+  for (int n = 2; n <= 5; n++) { t = ddivf(dmul(t, r), float(n)); s = dadd(s, t); }
+  for (int n = 0; n < 8; n++) s = dadd(2.0*s, dmul(s, s)); // (1+s)^2 - 1, eight times: ^256
+  vec2 e = dadd(D1, s);
+  float m = intBitsToFloat((int(k) + 127) << 23); // exactly 2^k
+  em1 = k == 0.0 ? s : dsub(m*e, D1);
+  return m * e;
+}
+vec4 dsincos(vec2 a) { // (sin, cos)
+  float k = floor(a.x / TWOPI.x + 0.5);
+  vec2 r = 0.125 * dsub(a, dmulf(TWOPI, k)), r2 = dmul(r, r); // |r| < pi/8
+  vec2 ts = r, s = r, tc = D1, c = tc;
+  for (int n = 1; n <= 7; n++) {
+    tc = -ddivf(dmul(tc, r2), float((2*n - 1) * (2*n)));
+    ts = -ddivf(dmul(ts, r2), float((2*n) * (2*n + 1)));
+    c = dadd(c, tc); s = dadd(s, ts);
+  }
+  for (int n = 0; n < 3; n++) { vec2 s2 = 2.0*dmul(s, c); c = dsub(D1, 2.0*dmul(s, s)); s = s2; }
+  return vec4(s, c);
+}
+vec4 dcoshsinh(vec2 a) { // (cosh, sinh); sinh from e^a - 1 so it stays exact near 0
+  vec2 em1, e = dexp(a, em1);
+  vec2 ie = ddiv(D1, e);
+  return vec4(0.5*dadd(e, ie), 0.5*dmul(em1, dadd(D1, ie)));
+}
+vec4 csin(vec4 z) { vec4 sc = dsincos(z.xy), ch = dcoshsinh(z.zw); return vec4(dmul(sc.xy, ch.xy), dmul(sc.zw, ch.zw)); }
+vec4 ccos(vec4 z) { vec4 sc = dsincos(z.xy), ch = dcoshsinh(z.zw); return vec4(dmul(sc.zw, ch.xy), -dmul(sc.xy, ch.zw)); }
+vec4 cexp(vec4 z) { vec2 em1, e = dexp(z.xy, em1); vec4 sc = dsincos(z.zw); return vec4(dmul(e, sc.zw), dmul(e, sc.xy)); }
+
+float conv(int i, float step, float eps) { return float(i) + 1.0 - clamp(log2(log(max(step, 1e-30)) / log(eps)), 0.0, 1.0); }
+float esc(int i, vec2 z, float deg) { float lz = 0.5*log(dot(z, z)); return max(0.0, float(i) + 1.0 - log(lz / (0.5*log(uBail2))) / log(deg)); }
+float escIm(int i, float y) { return float(i) + 1.0 - clamp(log2(y / 50.0) / 5.0, 0.0, 1.0); }
+
+void main() {
+  vec2 p = gl_FragCoord.xy - 0.5*uRes;
+  p.y *= uYSign;
+  vec4 pt = vec4(dadd(vec2(uCenter.x, uCenterLo.x), prod(p.x, uPix)), dadd(vec2(uCenter.y, uCenterLo.y), prod(p.y, uPix)));
+  vec4 jc = CF(uJC.x, uJC.y);
+  bool julia = uJulia == 1;
+  o = vec4(-1.0, 0.0, 0.0, 0.0);
+#if FORMULA == 100 || FORMULA == 111
+  vec4 z = pt;
+  for (int i = 0; i < uMaxIter; i++) {
+    vec4 z2 = csq(z);
+#if FORMULA == 100
+    vec4 dz = cdiv(csub(cmul(z2, z), ONE), cscale(z2, 3.0));
+    const float NR = 3.0;
+#else
+    vec4 z3 = cmul(z2, z), z4 = csq(z2);
+    vec4 f = csub(cmul(z4, z), ONE), f1 = cscale(z4, 5.0), f2 = cscale(z3, 20.0);
+    vec4 dz = cdiv(cscale(cmul(f, f1), 2.0), csub(cscale(csq(f1), 2.0), cmul(f, f2)));
+    const float NR = 5.0;
+#endif
+    z = csub(z, dz);
+    float st = length(hi(dz));
+    if (st < 1e-5) {
+      float root = mod(floor(atan(z.z, z.x) / (2.0*PI/NR) + 0.5) + NR, NR);
+      o = vec4(conv(i, st, 1e-5), 0.0, 0.0, 10.0 + root*3.0/NR);
+      return;
+    }
+  }
+#elif FORMULA == 101
+  vec4 c = julia ? jc : pt, z = julia ? pt : ONE;
+  for (int i = 0; i < uMaxIter; i++) {
+    vec4 z2 = csq(z);
+    vec4 nz = cadd(csub(z, cdiv(csub(cmul(z2, z), ONE), cscale(z2, 3.0))), c);
+    float st = length(hi(nz) - hi(z));
+    z = nz;
+    if (st < 1e-5) { o = vec4(conv(i, st, 1e-5), 0.0, 0.0, 0.0); return; }
+    if (dot(hi(z), hi(z)) > 1e8) return;
+  }
+#elif FORMULA == 102 || FORMULA == 103
+  vec4 c = julia ? jc : pt, z = julia ? pt : vec4(0.0);
+  vec4 c1 = csub(c, ONE), c2 = csub(c, 2.0*ONE), c12 = cmul(c1, c2);
+  for (int i = 0; i < uMaxIter; i++) {
+#if FORMULA == 102
+    vec4 q = cdiv(cadd(csq(z), c1), cadd(cscale(z, 2.0), c2));
+#else
+    vec4 z2 = csq(z);
+    vec4 q = cdiv(cadd(cadd(cmul(z2, z), cscale(cmul(c1, z), 3.0)), c12),
+                  cadd(cadd(cadd(cscale(z2, 3.0), cscale(cmul(c2, z), 3.0)), c12), ONE));
+#endif
+    z = csq(q);
+    vec2 h = hi(z);
+    if (dot(h, h) > uBail2) { o = vec4(esc(i, h, 2.0), 0.0, 0.0, 0.0); return; }
+    float st = length(h - D1);
+    if (st < 1e-5) { o = vec4(conv(i, st, 1e-5) * 3.0, 0.0, 0.0, 0.0); return; }
+  }
+#elif FORMULA == 104 || FORMULA == 105 || FORMULA == 109 || FORMULA == 110
+  vec4 c = julia ? jc : pt;
+#if FORMULA == 104
+  vec4 z = pt;
+#elif FORMULA == 105
+  vec4 z = pt;
+#else
+  vec4 z = julia ? pt : vec4(0.0), zp = z;
+#endif
+  for (int i = 0; i < uMaxIter; i++) {
+#if FORMULA == 104
+    z = cadd(csq(z), c);
+    c = cadd(cscale(c, 0.5), z);
+#elif FORMULA == 105
+    z = cmul(z.x >= 0.0 ? csub(z, ONE) : cadd(z, ONE), c);
+#elif FORMULA == 109
+    vec4 nz = csub(cadd(csq(z), c), cscale(zp, 0.5));
+    zp = z; z = nz;
+#else
+    vec4 nz = cadd(cadd(csq(z), zp), c);
+    zp = z; z = nz;
+#endif
+    vec2 h = hi(z);
+    if (dot(h, h) > uBail2) { o = vec4(esc(i, h, 2.0), 0.0, 0.0, 0.0); return; }
+  }
+#elif FORMULA == 106 || FORMULA == 112
+  vec4 c = julia ? jc : pt;
+#if FORMULA == 106
+  vec4 z = julia ? pt : uOne * vec4(1.57079637, -4.37113883e-8, 0.0, 0.0);
+#else
+  vec4 z = julia ? pt : vec4(0.0);
+#endif
+  for (int i = 0; i < uMaxIter; i++) {
+#if FORMULA == 106
+    z = cmul(c, csin(z));
+#else
+    z = cadd(ccos(z), c);
+#endif
+    if (abs(z.z) > 50.0) { o = vec4(escIm(i, abs(z.z)), 0.0, 0.0, 0.0); return; }
+  }
+#elif FORMULA == 113
+  vec4 c = julia ? jc : pt, z = julia ? pt : vec4(0.0);
+  for (int i = 0; i < uMaxIter; i++) {
+    z = cmul(c, cexp(z));
+    if (z.x > 50.0) { o = vec4(escIm(i, z.x), 0.0, 0.0, 0.0); return; }
+  }
+#elif FORMULA == 107
+  vec2 a = pt.xy, b = pt.zw;
+  if (a.x <= 0.0 || a.x > 4.0 || b.x <= 0.0 || b.x > 4.0) return;
+  vec2 x = vec2(0.5, 0.0);
+  float sum = 0.0;
+  int n = min(uMaxIter, 2000), k = 0;
+  for (int i = 0; i < 60; i++) { vec2 r = ((uSeq >> k) & 1) == 1 ? b : a; x = dmul(dmul(r, x), dsub(D1, x)); k = k + 1 == uSeqLen ? 0 : k + 1; }
+  for (int i = 0; i < n; i++) {
+    vec2 r = ((uSeq >> k) & 1) == 1 ? b : a;
+    x = dmul(dmul(r, x), dsub(D1, x));
+    sum += log(max(abs(r.x*(1.0 - 2.0*x.x)), 1e-30));
+    k = k + 1 == uSeqLen ? 0 : k + 1;
+  }
+  float lambda = sum / float(n);
+  if (lambda < 0.0) o = vec4(-lambda * 60.0, 0.0, 0.0, 0.0);
+  else o = vec4(-1.0, lambda, 0.0, 0.0);
+#endif
+}`;
+
 const COLOR_FS = `#version 300 es
 precision highp float; precision highp int; precision highp sampler2D;
 uniform sampler2D uLow, uFull, uPal;
@@ -405,8 +609,15 @@ export class Renderer {
     return p;
   }
 
-  fractalProg(code) {
-    return this.progs[code] || (this.progs[code] = this.link(VS, code >= 100 ? shallowFS(code) : fractalFS(code)));
+  fractalProg(code, df = false) {
+    const key = df ? code + 1000 : code;
+    return this.progs[key] || (this.progs[key] = this.link(VS, df ? shallowDF(code) : code >= 100 ? shallowFS(code) : fractalFS(code)));
+  }
+
+  // float formulas switch to double-float once a pixel is too small for float32 to resolve
+  static needsDF(P, pix) {
+    if (P.formula < 100 || P.formula === 108) return false;
+    return pix < 4e-7 * Math.max(1, Math.abs(P.centerX || 0), Math.abs(P.centerY || 0));
   }
 
   makeTex(filter, wrap) {
@@ -459,7 +670,8 @@ export class Renderer {
 
   // P: { formula, julia, refOffX, refOffY (complex units), scale, ySign, maxIter, lenA, offB, lenB, bail, degree }
   drawFractal(target, rw, rh, P, y0 = 0, y1 = rh) {
-    const gl = this.gl, prog = this.fractalProg(P.formula), u = prog.u;
+    const pix = 2 * P.scale / rh;
+    const gl = this.gl, prog = this.fractalProg(P.formula, Renderer.needsDF(P, pix)), u = prog.u;
     gl.bindFramebuffer(gl.FRAMEBUFFER, target.fbo);
     gl.viewport(0, 0, rw, rh);
     gl.enable(gl.SCISSOR_TEST);
@@ -468,7 +680,7 @@ export class Renderer {
     gl.bindVertexArray(this.vao);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, P.orbitTex || this.orbitTex);
-    const pix = 2 * P.scale / rh;
+    gl.uniform1f(u('uOne'), 1);
     gl.uniform1i(u('uOrbit'), 0);
     gl.uniform1i(u('uLenA'), P.lenA);
     gl.uniform1i(u('uOffB'), P.offB);

@@ -1,17 +1,18 @@
-import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=29ff8096';
-import { PALETTES, randomPalette } from './palettes.js?v=29ff8096';
-import { LOCATIONS, JULIAS, START } from './locations.js?v=29ff8096';
-import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=29ff8096';
-import { FRACTALS, FAMILIES } from './fractals.js?v=29ff8096';
-import { muxWebM } from './webm.js?v=29ff8096';
-import { asciiLogoSVG } from './logo.js?v=29ff8096';
+import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=508174dc';
+import { PALETTES, randomPalette } from './palettes.js?v=508174dc';
+import { LOCATIONS, JULIAS, START } from './locations.js?v=508174dc';
+import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=508174dc';
+import { FRACTALS, FAMILIES } from './fractals.js?v=508174dc';
+import { muxWebM } from './webm.js?v=508174dc';
+import { asciiLogoSVG } from './logo.js?v=508174dc';
 
 const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
+const DF_MIN_SCALE = 1e-10; // float types iterate in double-float past ~10^5x
 const MIN_SCALE = 1e-31, MAX_SCALE = 8, BAIL = 1000, HOME_SCALE = 1.25;
 
 // zoom floor: float-only types run out of precision near 10^5x
-const minScale = () => (S.f.deep ? MIN_SCALE : (S.f.minScale || 3e-5));
+const minScale = () => (S.f.deep ? MIN_SCALE : (S.f.minScale || DF_MIN_SCALE));
 // Lyapunov forcing sequence as bits (B = 1), read from bit 0 upwards
 const seqBits = (seq) => [...(seq || 'A')].reduce((acc, ch, i) => acc | ((ch === 'B' ? 1 : 0) << i), 0);
 
@@ -57,7 +58,7 @@ function maxIter() {
 let worker, ref = null, pend = null, reqId = 0;
 function startWorker() {
   if (worker) worker.terminate();
-  worker = new Worker(new URL('./refworker.js?v=29ff8096', import.meta.url));
+  worker = new Worker(new URL('./refworker.js?v=508174dc', import.meta.url));
   worker.onmessage = (e) => {
     const m = e.data;
     if (!pend || m.id !== pend.id) return;
@@ -518,7 +519,7 @@ function stopAutopilot(msg) {
 }
 function stepAutopilot(dt) {
   const f = Math.exp((performance.now() < apReverseUntil ? 1.5 : -1) * S.apSpeed * dt);
-  if (S.scale * f < minScale()) { stopAutopilot(S.f.deep ? 'Precision floor reached at 10³⁰× — what a dive!' : 'Zoom limit for this type (10⁵×): it has no deep-zoom path'); return; }
+  if (S.scale * f < minScale()) { stopAutopilot(S.f.deep ? 'Precision floor reached at 10³⁰× — what a dive!' : 'Zoom limit for this type (10¹⁰×): double-float precision floor'); return; }
   S.scale = Math.min(MAX_SCALE, S.scale * f);
   if (apTarget) {
     const k = 1 - Math.exp(-dt * 1.6);
@@ -1371,7 +1372,7 @@ function typeKeys(e) {
 }
 
 function thumbOrbit(f, maxIter) {
-  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=29ff8096', import.meta.url));
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=508174dc', import.meta.url));
   return new Promise((resolve) => {
     const id = Math.random();
     thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };
