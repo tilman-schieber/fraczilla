@@ -1,10 +1,10 @@
-import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=c7a2b01a';
-import { PALETTES, randomPalette } from './palettes.js?v=c7a2b01a';
-import { LOCATIONS, JULIAS, START } from './locations.js?v=c7a2b01a';
-import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=c7a2b01a';
-import { FRACTALS, FAMILIES } from './fractals.js?v=c7a2b01a';
-import { muxWebM } from './webm.js?v=c7a2b01a';
-import { asciiLogoSVG } from './logo.js?v=c7a2b01a';
+import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=80ebb278';
+import { PALETTES, randomPalette } from './palettes.js?v=80ebb278';
+import { LOCATIONS, JULIAS, START } from './locations.js?v=80ebb278';
+import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=80ebb278';
+import { FRACTALS, FAMILIES } from './fractals.js?v=80ebb278';
+import { muxWebM } from './webm.js?v=80ebb278';
+import { asciiLogoSVG } from './logo.js?v=80ebb278';
 
 const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
@@ -57,13 +57,21 @@ function maxIter() {
 let worker, ref = null, pend = null, reqId = 0;
 function startWorker() {
   if (worker) worker.terminate();
-  worker = new Worker(new URL('./refworker.js?v=c7a2b01a', import.meta.url));
+  worker = new Worker(new URL('./refworker.js?v=80ebb278', import.meta.url));
   worker.onmessage = (e) => {
     const m = e.data;
     if (!pend || m.id !== pend.id) return;
-    R.uploadOrbit(m.data, m.count);
-    ref = { ...pend, lenA: m.lenA, offB: m.offB, lenB: m.lenB, escaped: m.escapedA, ms: m.ms };
+    const next = { ...pend, lenA: m.lenA, offB: m.offB, lenB: m.lenB, escaped: m.escapedA, ms: m.ms, data: m.data, count: m.count };
     pend = null;
+    // an "improvement" that turned out no better than the best we had: go back to that one
+    const life = (r) => (r.escaped ? r.lenA : Infinity);
+    if (next.improve && refEpoch.best && refEpoch.best.key === next.key && life(next) <= life(refEpoch.best) * 1.05) {
+      if (ref !== refEpoch.best) { ref = refEpoch.best; R.uploadOrbit(ref.data, ref.count); invalidate(false); }
+      return;
+    }
+    R.uploadOrbit(m.data, m.count);
+    ref = next;
+    if (!refEpoch.best || ref.key !== refEpoch.best.key || life(ref) > life(refEpoch.best)) refEpoch.best = ref;
     invalidate(false);
   };
   worker.onerror = (e) => console.error('ref worker', e);
@@ -74,10 +82,19 @@ startWorker();
 const refKey = () => `${S.f.code}|${S.julia ? 1 : 0}|${S.julia ? S.jx + ',' + S.jy : ''}`;
 const bitsNeeded = () => Math.max(64, Math.ceil(-Math.log2(S.scale)) + 56);
 
-function requestRef(x, y) {
+// Probe-driven "find a longer-lived reference" attempts are limited per view, so two
+// candidates that each escape early can't take turns forever (that flickered).
+const refEpoch = { cx: 0n, cy: 0n, scale: 0, tries: 0, best: null };
+function refEpochCheck() {
+  const moved = Math.hypot(toDouble(S.cx - refEpoch.cx), toDouble(S.cy - refEpoch.cy)) > S.scale * 0.5;
+  const zoomed = !(S.scale > refEpoch.scale / 1.5 && S.scale < refEpoch.scale * 1.5);
+  if (moved || zoomed) { refEpoch.cx = S.cx; refEpoch.cy = S.cy; refEpoch.scale = S.scale; refEpoch.tries = 0; refEpoch.best = ref; }
+}
+
+function requestRef(x, y, improve = false) {
   const F = Math.min(FB, bitsNeeded() + 24);
   const mi = Math.ceil(maxIter() * 1.5) + 100;
-  pend = { id: ++reqId, key: refKey(), x, y, F, maxIter: mi };
+  pend = { id: ++reqId, key: refKey(), x, y, F, maxIter: mi, improve };
   worker.postMessage({
     id: pend.id, formula: S.f.code, julia: S.julia, F,
     rx: x.toString(), ry: y.toString(), jx: S.jx.toString(), jy: S.jy.toString(),
@@ -276,11 +293,13 @@ function analyzeProbe(P) {
     if (Math.abs(maxIter() - before) > before * 0.15) invalidate(false);
   }
   // pick a longer-lived reference if the current one escapes too early
-  if (S.f.deep && ref && ref.escaped && ref.lenA < maxIter() && !pend) {
-    const idx = interiorIdx >= 0 ? interiorIdx : (maxEsc > ref.lenA + 2 ? maxIdx : -1);
+  if (S.f.deep && ref) refEpochCheck();
+  if (S.f.deep && ref && ref.escaped && ref.lenA < maxIter() && !pend && refEpoch.tries < 2) {
+    const idx = interiorIdx >= 0 ? interiorIdx : (maxEsc > ref.lenA * 1.1 + 2 ? maxIdx : -1);
     if (idx >= 0) {
+      refEpoch.tries++;
       const [ox, oy] = pt(idx);
-      requestRef(S.cx + fromDouble(ox), S.cy + fromDouble(oy));
+      requestRef(S.cx + fromDouble(ox), S.cy + fromDouble(oy), true);
     }
   }
   if (S.autopilot) {
@@ -1351,7 +1370,7 @@ function typeKeys(e) {
 }
 
 function thumbOrbit(f, maxIter) {
-  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=c7a2b01a', import.meta.url));
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=80ebb278', import.meta.url));
   return new Promise((resolve) => {
     const id = Math.random();
     thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };
