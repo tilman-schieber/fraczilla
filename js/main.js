@@ -28,7 +28,7 @@ const S = {
   pal: 0, palData: PALETTES[0].data,
   density: 0, offset: 0, cycling: false, cycleSpeed: 30,
   mapping: 1, smooth: true, light: true, lightAngle: 45, lightStr: 0.55, edge: 0, inside: 0,
-  aa: true, autopilot: false, apSpeed: 0.6, flySpeed: 1.4,
+  aa: true, hq: false, autopilot: false, apSpeed: 0.6, flySpeed: 1.4,
 };
 let retroSaved = null;
 let iterFloor = 0; // learned from the probe: how deep the current view really is
@@ -120,6 +120,7 @@ function pan(dx, dy) {
 // ---------------------------------------------------------------- render scheduling
 let viewVer = 1, lowVer = 0, fullVer = 0, fullDone = 0, lowW = 1, lowH = 1, haveLow = false;
 let lowScale = 0.5, stripRows = 32, aaFactor = 2;
+let msPerRow = 0, dtHist = [];
 let lastMove = -1e9, colorDirty = true, lastProbe = 0, probedVer = 0;
 let saveReq = false, dtSmooth = 1 / 60;
 
@@ -163,6 +164,8 @@ function frame(now) {
   const dt = Math.min(0.1, Math.max(0.001, (now - lastT) / 1000));
   lastT = now;
   dtSmooth += (dt - dtSmooth) * 0.2;
+  dtHist.push(dt); if (dtHist.length > 90) dtHist.shift();
+  for (const ms of R.timePoll()) msPerRow = msPerRow ? msPerRow * 0.5 + ms * 0.5 : ms;
   fpsCount++;
   if (now - fpsT > 500) { fps = Math.round(fpsCount * 1000 / (now - fpsT)); fpsCount = 0; fpsT = now; }
 
@@ -189,11 +192,19 @@ function frame(now) {
       R.drawFractal(R.low, lowW, lowH, P);
       lowVer = viewVer; fullVer = viewVer; fullDone = 0; haveLow = true; colorDirty = true;
     } else if (!moving && fullDone < R.full.h) {
-      if (dt > 1 / 28) stripRows = Math.max(4, Math.floor(stripRows * 0.7));
-      else if (dt < 1 / 45) stripRows = Math.min(R.full.h, Math.ceil(stripRows * 1.3));
-      const rows = Math.min(stripRows, R.full.h - fullDone);
+      // size the strip by measured GPU time when we can, else by frame pacing
+      const budget = hq ? 70 : 14; // ms of GPU work per frame
+      if (msPerRow > 0) stripRows = Math.max(1, Math.floor(budget / msPerRow));
+      else {
+        const base = Math.min(...dtHist);
+        if (dt > base * 1.6 + 0.008) stripRows = Math.max(2, Math.floor(stripRows * 0.7));
+        else if (dt < base * 1.25 + 0.003) stripRows = Math.ceil(stripRows * 1.3);
+      }
+      const rows = Math.max(1, Math.min(stripRows, R.full.h - fullDone));
       const y1 = R.full.h - fullDone;
+      const q = R.timeStart();
       R.drawFractal(R.full, R.full.w, R.full.h, P, y1 - rows, y1);
+      R.timeEnd(q, rows);
       fullDone += rows; colorDirty = true;
     }
     if (lowVer === viewVer && probedVer !== viewVer && now - lastProbe > (S.autopilot ? 180 : 350)) {
@@ -248,7 +259,7 @@ function analyzeProbe(P) {
     if (Math.abs(maxIter() - before) > before * 0.15) invalidate(false);
   }
   // pick a longer-lived reference if the current one escapes too early
-  if (ref && ref.escaped && !pend) {
+  if (ref && ref.escaped && ref.lenA < maxIter() && !pend) {
     const idx = interiorIdx >= 0 ? interiorIdx : (maxEsc > ref.lenA + 2 ? maxIdx : -1);
     if (idx >= 0) {
       const [ox, oy] = pt(idx);
@@ -522,6 +533,7 @@ function goLocation(loc) {
   }
   const f = FORMULAS.find((q) => q.id === loc.f) || FORMULAS[0];
   if (f !== S.f || S.julia) { setFormula(f); }
+  if (S.hq) { prerenderJourney(loc); return; }
   flyTo(parseFixed(loc.x), parseFixed(loc.y), loc.s);
   toast(`FLYING TO ${loc.name.toUpperCase()}`);
 }
@@ -609,6 +621,7 @@ const pointers = new Map();
 let mouse = null, lastMoveT = 0;
 
 canvas.addEventListener('pointerdown', (e) => {
+  if (hq) { cancelHQ(); return; }
   hideSplash();
   canvas.setPointerCapture(e.pointerId);
   pointers.set(e.pointerId, { x: e.offsetX, y: e.offsetY });
@@ -654,6 +667,7 @@ canvas.addEventListener('pointerleave', () => { if (!pointers.size) mouse = null
 
 canvas.addEventListener('wheel', (e) => {
   e.preventDefault();
+  if (hq) { cancelHQ(); return; }
   hideSplash();
   let d = e.deltaY;
   if (e.deltaMode === 1) d *= 16; else if (e.deltaMode === 2) d *= 400;
@@ -673,6 +687,7 @@ canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 window.addEventListener('keydown', (e) => {
   hideSplash();
   if (typesOpen()) { if (e.key === 'Escape') closeTypes(); return; }
+  if (hq) { if (e.key === 'Escape') cancelHQ(); e.preventDefault(); return; }
   if (e.target.tagName === 'INPUT' && e.target.type !== 'checkbox' && e.target.type !== 'range') return;
   if (e.target.tagName === 'SELECT') return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -749,12 +764,13 @@ function updateStatus(refOk) {
   $('#stType').textContent = S.f.name + (S.julia ? ' JULIA' : '');
   $('#stX').textContent = formatFixed(S.cx, d);
   $('#stY').textContent = formatFixed(S.cy, d);
-  const mag = HOME_SCALE / S.scale;
+  const mag = HOME_SCALE / (hq && hq.phase === 'play' && hq.liveScale ? hq.liveScale : S.scale);
   $('#stZoom').textContent = (mag < 1e5 ? mag.toFixed(mag < 10 ? 2 : 0) : mag.toExponential(2).replace('e+', '·10^')) + '×';
   $('#stIter').textContent = maxIter();
   $('#stFps').textContent = `${fps} FPS`;
   let prog = '';
-  if (!refOk) prog = 'COMPUTING REFERENCE…';
+  if (hq) prog = hq.phase === 'render' ? `PRERENDERING ${hq.k}/${hq.K + 1} · ESC CANCELS` : 'FULL-QUALITY JOURNEY · ESC STOPS';
+  else   if (!refOk) prog = 'COMPUTING REFERENCE…';
   else if (fullVer === viewVer && fullDone < R.full.h && lowVer === viewVer) prog = `REFINING ${Math.floor(100 * fullDone / R.full.h)}%`;
   else if (S.autopilot) prog = 'AUTOPILOT';
   $('#stProg').textContent = prog;
@@ -819,6 +835,7 @@ function buildUI() {
   $('#smooth').onchange = (e) => { S.smooth = e.target.checked; colorDirty = true; };
   $('#light').onchange = (e) => { S.light = e.target.checked; colorDirty = true; };
   $('#aa').onchange = (e) => { S.aa = e.target.checked; resize(); };
+  $('#hq').onchange = (e) => { S.hq = e.target.checked; };
   $('#iterAuto').onchange = (e) => {
     S.iterAuto = e.target.checked;
     if (!S.iterAuto) S.iterManual = maxIter();
@@ -888,11 +905,125 @@ function syncUI() {
   $('#lightStr').value = S.lightStr;
   $('#edge').value = S.edge;
   $('#iterAuto').checked = S.iterAuto;
+  $('#hq').checked = S.hq;
   $('#iter').value = Math.log10(maxIter());
   $('#iterLabel').textContent = `MAX ${maxIter()}`;
 }
 
 canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); fatal('The GPU context was lost (driver reset). Reload the page to continue.'); });
+
+// ---------------------------------------------------------------- prerendered (full-quality) journeys
+// A straight dive into the destination, rendered as keyframes one octave apart at
+// the full anti-aliased resolution, then played back by scaling the keyframes.
+// No keyframe is ever enlarged past its native resolution, so every frame is sharp.
+const movie = $('#movie');
+const hqCache = new Map();
+let hq = null;
+const nextFrame = () => new Promise((r) => requestAnimationFrame(r));
+
+async function waitSettled() {
+  for (;;) {
+    await nextFrame();
+    if (!hq || hq.cancel) return false;
+    const done = () => ref && ref.key === refKey() && !pend && lowVer === viewVer && fullVer === viewVer && fullDone >= R.full.h && probedVer === viewVer;
+    if (done()) { await nextFrame(); await nextFrame(); if (done()) return true; }
+  }
+}
+
+function cancelHQ() {
+  if (!hq) return;
+  hq.cancel = true;
+  if (hq.phase === 'play' && hq.liveScale) { S.cx = hq.tx; S.cy = hq.ty; S.scale = hq.liveScale; invalidate(false); }
+  movie.classList.add('hidden');
+  hq = null;
+  toast('JOURNEY STOPPED');
+}
+
+async function prerenderJourney(loc) {
+  stopMotion();
+  const tx = parseFixed(loc.x), ty = parseFixed(loc.y);
+  const s0 = Math.max(S.f.home[2], loc.s * 2), s1 = loc.s;
+  const K = Math.max(1, Math.ceil(Math.log2(s0 / s1)));
+  const r = Math.pow(s0 / s1, 1 / K);
+  const scales = Array.from({ length: K + 1 }, (_, k) => s0 / Math.pow(r, k));
+  const C = colorParams();
+  const key = `${loc.f}|${loc.x}|${loc.y}|${loc.s}|${S.pal}|${JSON.stringify(C)}|${R.full.w}x${R.full.h}`;
+  hq = { phase: 'render', k: 0, K, tx, ty, cancel: false };
+  const job = hq;
+  let frames = S.pal >= 0 && hqCache.get(key);
+  if (!frames) {
+    toast(`PRERENDERING ${loc.name.toUpperCase()} (${K + 1} KEYFRAMES)`);
+    frames = [];
+    for (let k = 0; k <= K; k++) {
+      S.cx = tx; S.cy = ty; S.scale = scales[k];
+      invalidate(false);
+      if (!(await waitSettled()) || job.cancel) return;
+      const img = R.colorize(R.full, R.full.w, R.full.h, C);
+      const oc = new OffscreenCanvas(img.width, img.height);
+      oc.getContext('2d').putImageData(img, 0, 0);
+      frames.push(await oc.convertToBlob({ type: 'image/webp', quality: 0.92 }));
+      job.k = k + 1;
+    }
+    if (S.pal >= 0) hqCache.set(key, frames);
+  }
+  if (job.cancel) return;
+  await playJourney(job, frames, scales, r, loc);
+}
+
+async function playJourney(job, frames, scales, r, loc) {
+  job.phase = 'play';
+  const K = frames.length - 1;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  movie.width = Math.round(cssW * dpr); movie.height = Math.round(cssH * dpr);
+  const ctx = movie.getContext('2d');
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  const bms = [];
+  const get = (k) => (bms[k] ||= createImageBitmap(frames[k]));
+  const W = movie.width, H = movie.height;
+  const draw = (bm, z, alpha) => {
+    // bm covers the keyframe's view; show its central 1/z
+    const sw = bm.width / z, sh = bm.height / z;
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(bm, (bm.width - sw) / 2, (bm.height - sh) / 2, sw, sh, 0, 0, W, H);
+  };
+  const drawInner = (bm, frac, alpha) => {
+    // a deeper keyframe covers only the central `frac` of the screen
+    const dw = W * frac, dh = H * frac;
+    ctx.globalAlpha = alpha;
+    ctx.drawImage(bm, (W - dw) / 2, (H - dh) / 2, dw, dh);
+  };
+  // first frame before showing the overlay, so there's no flash
+  draw(await get(0), 1, 1);
+  movie.classList.remove('hidden');
+  toast(`▶ ${loc.name.toUpperCase()} IN FULL QUALITY`);
+  // octaves per second from the flight-speed slider; ease in and out over `a` seconds
+  const speed = 0.85 * S.flySpeed, a = Math.min(1.5, K / speed / 3);
+  const T = K / speed + a, vmax = K / (T - a);
+  const pos = (t) => (t < a ? vmax * t * t / (2 * a) : t < T - a ? vmax * (t - a / 2) : K - vmax * (T - t) ** 2 / (2 * a));
+  const t0 = performance.now();
+  for (;;) {
+    await nextFrame();
+    if (job.cancel) { bms.forEach((p) => p.then((b) => b.close())); return; }
+    const t = Math.min(T, (performance.now() - t0) / 1000);
+    const L = Math.max(0, Math.min(K, pos(t)));
+    const k = Math.min(K - 1, Math.floor(L)), f = L - k, z = Math.pow(r, f);
+    for (let j = k; j <= Math.min(K, k + 3); j++) get(j);
+    for (let j = 0; j < k - 1; j++) if (bms[j]) { bms[j].then((b) => b.close()); bms[j] = null; }
+    const bm = await get(k);
+    if (job.cancel) return;
+    draw(bm, z, 1);
+    if (f > 0.8) drawInner(await get(k + 1), z / r, (f - 0.8) / 0.2);
+    ctx.globalAlpha = 1;
+    job.liveScale = scales[k] / z;
+    if (t >= T) break;
+  }
+  // hand over to the live view at the destination; keep the movie up until it's sharp
+  S.cx = job.tx; S.cy = job.ty; S.scale = scales[K];
+  invalidate(false);
+  await waitSettled();
+  bms.forEach((p) => p && p.then((b) => b.close()));
+  if (hq === job) { movie.classList.add('hidden'); hq = null; }
+}
 
 // ---------------------------------------------------------------- type browser
 const THUMB_W = 240, THUMB_H = 150;
@@ -1049,6 +1180,7 @@ async function renderThumbs() {
 // #fly=<journey> starts a flight from the overview, e.g. #fly=the-abyss
 const slug = (t) => t.toLowerCase().replace(/\(.*?\)/g, '').normalize('NFKD').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
 const flyParam = new URLSearchParams(location.hash.slice(1)).get('fly');
+if (new URLSearchParams(location.hash.slice(1)).get('hq') === '1') S.hq = true;
 const flyLoc = flyParam && LOCATIONS.find((l) => slug(l.name) === slug(flyParam));
 if (flyLoc) {
   S.f = FORMULAS.find((q) => q.id === flyLoc.f) || FORMULAS[0];
@@ -1062,4 +1194,4 @@ resize();
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.fraczilla = { S, get ref() { return ref; }, flyTo: (x, y, s) => flyTo(parseFixed(x), parseFixed(y), s) };
+window.fraczilla = { S, get ref() { return ref; }, get state() { return { viewVer, lowVer, fullVer, fullDone, fullH: R.full.h, probedVer, pend: !!pend, refOk: !!ref && ref.key === refKey() }; }, flyTo: (x, y, s) => flyTo(parseFixed(x), parseFixed(y), s) };

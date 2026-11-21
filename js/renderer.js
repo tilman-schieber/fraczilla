@@ -181,6 +181,8 @@ export class Renderer {
     this.probeT = this.makeTarget(PROBE_MAXW, PROBE_H);
     this.probeBuf = new Float32Array(PROBE_MAXW * PROBE_H * 4);
     this.maxTex = gl.getParameter(gl.MAX_TEXTURE_SIZE);
+    this.timerExt = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+    this.timers = [];
   }
 
   link(vs, fs) {
@@ -321,17 +323,13 @@ export class Renderer {
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
 
-  // Render a small fully colored picture offscreen and return it as ImageData.
-  // P must carry orbitTex: this.thumbOrbitTex (so the main reference stays intact).
-  thumbnail(P, C, w, h) {
+  // Color a float data target into an RGBA8 offscreen target and read it back (top-down ImageData).
+  colorize(src, w, h, C) {
     const gl = this.gl;
-    if (!this.thumbData) {
-      this.thumbData = this.makeTarget(w, h);
-      const tex = this.makeTex(gl.NEAREST), fbo = gl.createFramebuffer();
-      this.thumbOut = { tex, fbo, w: 0, h: 0 };
+    if (!this.outT) {
+      this.outT = { tex: this.makeTex(gl.NEAREST), fbo: gl.createFramebuffer(), w: 0, h: 0 };
     }
-    this.sizeTarget(this.thumbData, w, h);
-    const o = this.thumbOut;
+    const o = this.outT;
     if (o.w !== w || o.h !== h) {
       gl.bindTexture(gl.TEXTURE_2D, o.tex);
       gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
@@ -339,15 +337,50 @@ export class Renderer {
       gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, o.tex, 0);
       o.w = w; o.h = h;
     }
-    this.drawFractal(this.thumbData, w, h, P);
-    this.composite({ ...C, lowTex: this.thumbData.tex, lowW: w, lowH: h, haveFull: false, doneY: h }, o);
+    this.composite({ ...C, lowTex: src.tex, lowW: w, lowH: h, haveFull: false, doneY: h }, o);
     const px = new Uint8ClampedArray(w * h * 4);
     gl.bindFramebuffer(gl.FRAMEBUFFER, o.fbo);
     gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
     gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    // GL rows are bottom-up; ImageData is top-down
     const img = new ImageData(w, h), row = w * 4;
     for (let y = 0; y < h; y++) img.data.set(px.subarray((h - 1 - y) * row, (h - y) * row), y * row);
     return img;
+  }
+
+  // Render a small fully colored picture offscreen and return it as ImageData.
+  // P must carry orbitTex: this.thumbOrbitTex (so the main reference stays intact).
+  thumbnail(P, C, w, h) {
+    if (!this.thumbData) this.thumbData = this.makeTarget(w, h);
+    this.sizeTarget(this.thumbData, w, h);
+    this.drawFractal(this.thumbData, w, h, P);
+    return this.colorize(this.thumbData, w, h, C);
+  }
+
+  // GPU timing (EXT_disjoint_timer_query_webgl2), so refinement can be sized by real GPU cost.
+  timeStart() {
+    if (!this.timerExt || this.timers.length > 4) return null;
+    const q = this.gl.createQuery();
+    this.gl.beginQuery(this.timerExt.TIME_ELAPSED_EXT, q);
+    return q;
+  }
+  timeEnd(q, units) {
+    if (!q) return;
+    this.gl.endQuery(this.timerExt.TIME_ELAPSED_EXT);
+    this.timers.push({ q, units });
+  }
+  // -> array of milliseconds per unit for finished measurements
+  timePoll() {
+    const gl = this.gl, out = [];
+    if (!this.timerExt) return out;
+    const disjoint = gl.getParameter(this.timerExt.GPU_DISJOINT_EXT);
+    while (this.timers.length) {
+      const t = this.timers[0];
+      if (!gl.getQueryParameter(t.q, gl.QUERY_RESULT_AVAILABLE)) break;
+      const ns = gl.getQueryParameter(t.q, gl.QUERY_RESULT);
+      gl.deleteQuery(t.q);
+      this.timers.shift();
+      if (!disjoint) out.push(ns / 1e6 / t.units);
+    }
+    return out;
   }
 }
