@@ -45,7 +45,7 @@ export const LOCATIONS = [
   { name: 'The Whole Newton', f: 'newton', x: '0', y: '0', s: 1.6 },
   { name: 'Triple Junction', f: 'newton', x: '0.00029882', y: '-0.00067018', s: 0.00266 },
   { name: 'The Whole Nova', f: 'nova', x: '-0.6', y: '0', s: 0.45 },
-  { name: 'Nova Minibrot', f: 'nova', x: '-0.49', y: '0', s: 0.06 },
+  { name: 'Nova Minibrot', f: 'nova', x: '-0.61098958', y: '-0.00022487', s: 0.00365537 },
   { name: 'Nova Shoreline', f: 'nova', x: '-0.35891817', y: '-0.0611454', s: 0.0183 },
   { name: 'The Whole Magnet', f: 'magnet1', x: '1.6', y: '0', s: 2.6 },
   { name: 'Minibrot in the Foam', f: 'magnet1', x: '1.58931958', y: '0.13816158', s: 0.0242749 },
