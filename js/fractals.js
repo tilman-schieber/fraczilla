@@ -60,7 +60,7 @@ export const FRACTALS = [
   {
     id: 'lambda', name: 'LAMBDA', family: 'mandel', code: 7, degree: 2, ySign: 1,
     home: ['1', '0', 1.9], deep: true, juliaHome: ['0.5', '0', 0.8], start: 'Lambda Dragon',
-    blurb: 'c·z(1−z), the logistic map in the complex plane. Two Mandelbrots back to back.',
+    blurb: 'c·z(1−z), the logistic map in the complex plane. Opens on its dragon; SPACE shows the c-plane.',
   },
   {
     id: 'buffalo', name: 'BUFFALO', family: 'abs', code: 8, degree: 2, ySign: -1,
@@ -105,7 +105,7 @@ export const FRACTALS = [
   {
     id: 'phoenix', name: 'PHOENIX', family: 'classic', code: 109, degree: 2, ySign: 1,
     home: ['-0.35', '0', 1.0], start: 'Phoenix Bird',
-    blurb: "z² + c − ½·z₋₁. Remembers its last step. Try JULIA at c = 0.5667 for the classic bird.",
+    blurb: "z² + c − ½·z₋₁. Remembers its last step. Opens on the classic bird at c = 0.5667.",
   },
   {
     id: 'manowar', name: 'MANOWAR', family: 'classic', code: 110, degree: 2, ySign: 1,

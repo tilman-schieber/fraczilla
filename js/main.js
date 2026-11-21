@@ -1,10 +1,10 @@
-import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=5894ed56';
-import { PALETTES, randomPalette } from './palettes.js?v=5894ed56';
-import { LOCATIONS, START } from './locations.js?v=5894ed56';
-import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=5894ed56';
-import { FRACTALS, FAMILIES } from './fractals.js?v=5894ed56';
-import { muxWebM } from './webm.js?v=5894ed56';
-import { asciiLogoSVG } from './logo.js?v=5894ed56';
+import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=566a4101';
+import { PALETTES, randomPalette } from './palettes.js?v=566a4101';
+import { LOCATIONS, START } from './locations.js?v=566a4101';
+import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=566a4101';
+import { FRACTALS, FAMILIES } from './fractals.js?v=566a4101';
+import { muxWebM } from './webm.js?v=566a4101';
+import { asciiLogoSVG } from './logo.js?v=566a4101';
 
 const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
@@ -62,7 +62,7 @@ function maxIter() {
 let worker, ref = null, pend = null, reqId = 0;
 function startWorker() {
   if (worker) worker.terminate();
-  worker = new Worker(new URL('./refworker.js?v=5894ed56', import.meta.url));
+  worker = new Worker(new URL('./refworker.js?v=566a4101', import.meta.url));
   worker.onmessage = (e) => {
     const m = e.data;
     if (!pend || m.id !== pend.id) return;
@@ -1619,7 +1619,7 @@ function typeKeys(e) {
 }
 
 function thumbOrbit(f, maxIter) {
-  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=5894ed56', import.meta.url));
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=566a4101', import.meta.url));
   return new Promise((resolve) => {
     const id = Math.random();
     thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };
@@ -1637,7 +1637,7 @@ let picWorker = null;
 const picWait = new Map();
 function picOrbit(f, julia, cx, cy, jx, jy, F, maxIter) {
   if (!picWorker) {
-    picWorker = new Worker(new URL('./refworker.js?v=5894ed56', import.meta.url));
+    picWorker = new Worker(new URL('./refworker.js?v=566a4101', import.meta.url));
     picWorker.onmessage = (e) => { const r = picWait.get(e.data.id); if (r) { picWait.delete(e.data.id); r(e.data); } };
   }
   return new Promise((resolve) => {
@@ -1719,6 +1719,13 @@ async function renderThumbs() {
       const f = FORMULAS.find((q) => q.id === card.dataset.id);
       const ctx = card.querySelector('canvas').getContext('2d');
       let img = thumbCache.get(f.id);
+      const start = f.start && LOCATIONS.find((l) => l.name === f.start);
+      if (!img && start) {
+        // types that open on a Julia set show that picture, not the c-plane
+        img = await picture(f, { x: start.x, y: start.y, s: start.s * 1.05, jx: start.jx, jy: start.jy, maxIter: 600 }, THUMB_W, THUMB_H);
+        thumbCache.set(f.id, img);
+        await new Promise((r) => requestAnimationFrame(r));
+      }
       if (!img) {
         const maxIter = 600;
         const m = f.deep ? await thumbOrbit(f, maxIter) : { lenA: 0, offB: 0, lenB: 0 };
