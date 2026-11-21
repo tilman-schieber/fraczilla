@@ -39,6 +39,7 @@ export const LOCATIONS = [
   { name: 'The Whole Perp. Ship', f: 'perpship', x: '-0.5', y: '0', s: 1.3 },
   { name: 'Flame Coast', f: 'perpship', x: '-0.81198999', y: '0.0953683', s: 0.0214 },
   { name: 'Solar Swoosh', f: 'perpship', x: '-0.87377853', y: '0.09627233', s: 0.00867 },
+  { name: 'Spiro-Giro', f: 'perpship', x: '-0.874206527', y: '0.096073835', s: 0.000020487 },
   { name: 'The Whole Perp. Mandelbrot', f: 'perpmandel', x: '-0.5', y: '0', s: 1.3 },
   { name: 'Twin Rivers', f: 'perpmandel', x: '-0.74493974', y: '-0.1152039', s: 0.0266 },
   { name: 'The Whole Newton', f: 'newton', x: '0', y: '0', s: 1.6 },
