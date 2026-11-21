@@ -1,10 +1,10 @@
-import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=3ad07ee8';
-import { PALETTES, randomPalette } from './palettes.js?v=3ad07ee8';
-import { LOCATIONS, JULIAS, START } from './locations.js?v=3ad07ee8';
-import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=3ad07ee8';
-import { FRACTALS, FAMILIES } from './fractals.js?v=3ad07ee8';
-import { muxWebM } from './webm.js?v=3ad07ee8';
-import { asciiLogoSVG } from './logo.js?v=3ad07ee8';
+import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=5f737c89';
+import { PALETTES, randomPalette } from './palettes.js?v=5f737c89';
+import { LOCATIONS, JULIAS, START } from './locations.js?v=5f737c89';
+import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=5f737c89';
+import { FRACTALS, FAMILIES } from './fractals.js?v=5f737c89';
+import { muxWebM } from './webm.js?v=5f737c89';
+import { asciiLogoSVG } from './logo.js?v=5f737c89';
 
 const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
@@ -57,7 +57,7 @@ function maxIter() {
 let worker, ref = null, pend = null, reqId = 0;
 function startWorker() {
   if (worker) worker.terminate();
-  worker = new Worker(new URL('./refworker.js?v=3ad07ee8', import.meta.url));
+  worker = new Worker(new URL('./refworker.js?v=5f737c89', import.meta.url));
   worker.onmessage = (e) => {
     const m = e.data;
     if (!pend || m.id !== pend.id) return;
@@ -1371,7 +1371,7 @@ function typeKeys(e) {
 }
 
 function thumbOrbit(f, maxIter) {
-  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=3ad07ee8', import.meta.url));
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=5f737c89', import.meta.url));
   return new Promise((resolve) => {
     const id = Math.random();
     thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };
