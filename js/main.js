@@ -1,10 +1,10 @@
-import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=a80ab12a';
-import { PALETTES, randomPalette } from './palettes.js?v=a80ab12a';
-import { LOCATIONS, JULIAS, START } from './locations.js?v=a80ab12a';
-import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=a80ab12a';
-import { FRACTALS, FAMILIES } from './fractals.js?v=a80ab12a';
-import { muxWebM } from './webm.js?v=a80ab12a';
-import { asciiLogoSVG } from './logo.js?v=a80ab12a';
+import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=b02c5c70';
+import { PALETTES, randomPalette } from './palettes.js?v=b02c5c70';
+import { LOCATIONS, JULIAS, START } from './locations.js?v=b02c5c70';
+import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=b02c5c70';
+import { FRACTALS, FAMILIES } from './fractals.js?v=b02c5c70';
+import { muxWebM } from './webm.js?v=b02c5c70';
+import { asciiLogoSVG } from './logo.js?v=b02c5c70';
 
 const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
@@ -57,7 +57,7 @@ function maxIter() {
 let worker, ref = null, pend = null, reqId = 0;
 function startWorker() {
   if (worker) worker.terminate();
-  worker = new Worker(new URL('./refworker.js?v=a80ab12a', import.meta.url));
+  worker = new Worker(new URL('./refworker.js?v=b02c5c70', import.meta.url));
   worker.onmessage = (e) => {
     const m = e.data;
     if (!pend || m.id !== pend.id) return;
@@ -655,9 +655,10 @@ function readHash() {
   try {
     const p = new URLSearchParams(location.hash.slice(1));
     S.f = FORMULAS.find((q) => q.id === p.get('f')) || FORMULAS[0];
-    if (p.has('x')) S.cx = parseFixed(p.get('x'));
-    if (p.has('y')) S.cy = parseFixed(p.get('y'));
-    if (p.has('s')) S.scale = Math.min(MAX_SCALE, Math.max(minScale(), parseFloat(p.get('s')) || HOME_SCALE));
+    const h = S.f.home;
+    S.cx = parseFixed(p.get('x') || h[0]);
+    S.cy = parseFixed(p.get('y') || h[1]);
+    S.scale = Math.min(MAX_SCALE, Math.max(minScale(), parseFloat(p.get('s')) || h[2]));
     if (p.has('jx')) { S.julia = true; S.jx = parseFixed(p.get('jx')); S.jy = parseFixed(p.get('jy') || '0'); }
     if (p.has('p')) { const i = +p.get('p'); if (PALETTES[i]) { S.pal = i; S.palData = PALETTES[i].data; } }
     if (p.has('d')) S.density = +p.get('d') || 0;
@@ -1370,7 +1371,7 @@ function typeKeys(e) {
 }
 
 function thumbOrbit(f, maxIter) {
-  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=a80ab12a', import.meta.url));
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=b02c5c70', import.meta.url));
   return new Promise((resolve) => {
     const id = Math.random();
     thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };

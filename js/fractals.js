@@ -27,7 +27,7 @@ export const FRACTALS = [
   },
   {
     id: 'burningship', name: 'BURNING SHIP', family: 'abs', code: 1, degree: 2, ySign: -1,
-    home: ['-0.4', '-0.55', 1.15], deep: true, quick: true, chaotic: true,
+    home: ['-0.4', '-0.55', 1.15], deep: true, chaotic: true,
     blurb: '(|x| + i|y|)² + c. A burning galleon and its cathedral antenna.',
   },
   {
@@ -77,12 +77,12 @@ export const FRACTALS = [
   },
   {
     id: 'newton', name: 'NEWTON', family: 'roots', code: 100, degree: 2, ySign: 1,
-    home: ['0', '0', 1.6], quick: true, julia: false,
+    home: ['0', '0', 1.6], julia: false,
     blurb: "Newton's method on z³ − 1. Three basins braided along infinitely fine borders.",
   },
   {
     id: 'nova', name: 'NOVA', family: 'roots', code: 101, degree: 2, ySign: 1,
-    home: ['-0.6', '0', 0.45],
+    home: ['-0.6', '0', 0.45], quick: true,
     blurb: 'Newton + c. Converging orbits paint a set full of Newton-ish minibrots.',
   },
   {
@@ -97,7 +97,7 @@ export const FRACTALS = [
   },
   {
     id: 'spider', name: 'SPIDER', family: 'classic', code: 104, degree: 2, ySign: 1,
-    home: ['-0.4', '0', 1.4], julia: false,
+    home: ['-0.4', '0', 1.4], quick: true, julia: false,
     blurb: 'z = z² + c, c = c/2 + z. A Mandelbrot whose c wanders along.',
   },
   {
