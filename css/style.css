@@ -237,6 +237,8 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 18px; background: var
 #frameLabel { position: absolute; top: 4px; left: 6px; color: #ffff55; background: #000a; padding: 0 4px; font-size: 18px; }
 
 /* Julia highlights in the journey list */
+.list .lhead { color: var(--cyan); font-size: .8em; margin: 6px 0 1px; letter-spacing: .05em; }
+.list .lhead:first-child { margin-top: 0; }
 .list button .jbadge {
   display: inline-block; width: 1.1em; margin-right: 6px; text-align: center;
   background: var(--yellow); color: var(--blue-dk);

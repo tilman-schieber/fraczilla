@@ -1,10 +1,10 @@
-import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=de6d48d2';
-import { PALETTES, randomPalette } from './palettes.js?v=de6d48d2';
-import { LOCATIONS, START } from './locations.js?v=de6d48d2';
-import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=de6d48d2';
-import { FRACTALS, FAMILIES } from './fractals.js?v=de6d48d2';
-import { muxWebM } from './webm.js?v=de6d48d2';
-import { asciiLogoSVG } from './logo.js?v=de6d48d2';
+import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=f5daea63';
+import { PALETTES, randomPalette } from './palettes.js?v=f5daea63';
+import { LOCATIONS, START } from './locations.js?v=f5daea63';
+import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=f5daea63';
+import { FRACTALS, FAMILIES } from './fractals.js?v=f5daea63';
+import { muxWebM } from './webm.js?v=f5daea63';
+import { asciiLogoSVG } from './logo.js?v=f5daea63';
 
 const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
@@ -62,7 +62,7 @@ function maxIter() {
 let worker, ref = null, pend = null, reqId = 0;
 function startWorker() {
   if (worker) worker.terminate();
-  worker = new Worker(new URL('./refworker.js?v=de6d48d2', import.meta.url));
+  worker = new Worker(new URL('./refworker.js?v=f5daea63', import.meta.url));
   worker.onmessage = (e) => {
     const m = e.data;
     if (!pend || m.id !== pend.id) return;
@@ -400,7 +400,7 @@ const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math
 function tourPlaylist() {
   const byType = new Map();
   for (const l of LOCATIONS) {
-    if (l.f === 'plasma' || l.name.startsWith('The Whole')) continue;
+    if (l.f === 'plasma' || l.tour === false || l.name.startsWith('The Whole')) continue;
     if (!byType.has(l.f)) byType.set(l.f, []);
     byType.get(l.f).push(l);
   }
@@ -971,21 +971,39 @@ function juliaJourneys() {
   return list;
 }
 
-function currentJourneys() {
+// The journey list in groups, so it is clear which entries stay in the current
+// picture and which switch to another Julia set or back to the type's own map.
+function journeyGroups() {
   const spots = LOCATIONS.filter((l) => l.f === S.f.id);
-  // in a curated Julia set, its own entry already is "the whole Julia set"
-  const curated = S.julia && spots.some((l) => l.jx != null && parseFixed(l.jx) === S.jx && parseFixed(l.jy) === S.jy);
-  const list = [...(S.julia ? juliaJourneys().slice(curated ? 1 : 0) : []), ...spots];
-  if (!list.length) list.push({ name: `The Whole ${S.f.name.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase())}`, f: S.f.id, x: S.f.home[0], y: S.f.home[1], s: S.f.home[2] });
-  return list;
+  const plane = spots.filter((l) => l.jx == null), jul = spots.filter((l) => l.jx != null);
+  if (!plane.length) plane.push({ name: `The Whole ${S.f.name.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase())}`, f: S.f.id, x: S.f.home[0], y: S.f.home[1], s: S.f.home[2] });
+  if (!S.julia) return [{ title: S.f.name, items: plane }, { title: 'JULIA SETS', items: jul }];
+  // in a curated Julia set, its own entry is "the whole Julia set"
+  const isHere = (l) => parseFixed(l.jx) === S.jx && parseFixed(l.jy) === S.jy;
+  const own = jul.find(isHere);
+  const these = own ? [own, ...juliaJourneys().slice(1)] : juliaJourneys();
+  return [
+    { title: 'THIS JULIA SET', items: these },
+    { title: 'OTHER JULIA SETS', items: jul.filter((l) => l !== own) },
+    { title: `BACK TO ${S.f.name}`, items: plane },
+  ];
 }
+const currentJourneys = () => journeyGroups().flatMap((g) => g.items);
 function buildLocations() {
   const key = S.f.id + (S.julia ? `J${S.jx},${S.jy}` : '');
   if (key === shownLocKey) return;
   shownLocKey = key;
   const lwrap = $('#locations');
   lwrap.innerHTML = '';
-  currentJourneys().forEach((loc, i) => {
+  let i = -1;
+  for (const g of journeyGroups()) {
+    if (!g.items.length) continue;
+    const h = document.createElement('div');
+    h.className = 'lhead'; h.textContent = g.title;
+    lwrap.appendChild(h);
+    for (const loc of g.items) addJourney(loc, ++i);
+  }
+  function addJourney(loc, i) {
     const b = document.createElement('button');
     const jul = loc.inJulia || loc.jx != null;
     const mag = (jul ? juliaHome().s : HOME_SCALE) / loc.s;
@@ -996,7 +1014,7 @@ function buildLocations() {
     if (loc.name === 'Mirror of c') b.title = 'Near z = c, a Julia set echoes the Mandelbrot set around c';
     b.onclick = () => { locIdx = i; goLocation(loc); phoneClosePanel(); };
     lwrap.appendChild(b);
-  });
+  }
 }
 
 function syncUI() {
@@ -1544,7 +1562,7 @@ function typeKeys(e) {
 }
 
 function thumbOrbit(f, maxIter) {
-  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=de6d48d2', import.meta.url));
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=f5daea63', import.meta.url));
   return new Promise((resolve) => {
     const id = Math.random();
     thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };
@@ -1562,7 +1580,7 @@ let picWorker = null;
 const picWait = new Map();
 function picOrbit(f, julia, cx, cy, jx, jy, F, maxIter) {
   if (!picWorker) {
-    picWorker = new Worker(new URL('./refworker.js?v=de6d48d2', import.meta.url));
+    picWorker = new Worker(new URL('./refworker.js?v=f5daea63', import.meta.url));
     picWorker.onmessage = (e) => { const r = picWait.get(e.data.id); if (r) { picWait.delete(e.data.id); r(e.data); } };
   }
   return new Promise((resolve) => {

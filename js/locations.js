@@ -1,6 +1,7 @@
 // Curated destinations for zoom journeys. Coordinates are strings to keep full precision.
 // jx/jy: a Julia highlight (x, y, s are then the view inside that Julia set).
 // pal/d: the palette and color density the spot is shown in (default Ultra, 0).
+// tour: false keeps a spot out of the lean-back tour (A).
 export const LOCATIONS = [
   { name: 'The Whole Set', f: 'mandelbrot', x: '-0.6', y: '0', s: 1.25 },
   { name: 'Seahorse Valley', f: 'mandelbrot', x: '-0.7453', y: '0.1127', s: 0.0035 },
@@ -22,7 +23,7 @@ export const LOCATIONS = [
   { name: 'The Whole Tricorn', f: 'tricorn', x: '-0.3', y: '0', s: 1.45 },
   { name: 'The Mantis', f: 'tricorn', x: '-1.25', y: '0', s: 0.2 },
   { name: 'Mini Tricorn', f: 'tricorn', x: '-1.392', y: '0', s: 0.02 },
-  { name: 'Zebra Cliffs', f: 'tricorn', x: '-0.57355308', y: '0.04466584', s: 0.08 },
+  { name: 'Zebra Cliffs', f: 'tricorn', x: '-0.57355308', y: '0.04466584', s: 0.08, tour: false },
   { name: 'Tricorn Jewel', f: 'tricorn', jx: '-0.5736', jy: '0.0447', x: '0', y: '0', s: 1.3, pal: 'Inferno' },
   { name: 'The Whole Celtic', f: 'celtic', x: '-0.4', y: '0', s: 1.3 },
   { name: 'Floating Islands', f: 'celtic', x: '-0.77290365', y: '-0.57652433', s: 0.32 },
@@ -55,7 +56,7 @@ export const LOCATIONS = [
   { name: 'Twin Rivers', f: 'perpmandel', x: '-0.74493974', y: '-0.1152039', s: 0.0266 },
   { name: 'The Bat', f: 'perpmandel', jx: '-0.7449', jy: '-0.1152', x: '0', y: '0', s: 1.1, pal: 'Inferno' },
   { name: 'The Whole Newton', f: 'newton', x: '0', y: '0', s: 1.6 },
-  { name: 'Triple Junction', f: 'newton', x: '0.00029882', y: '-0.00067018', s: 0.00266 },
+  { name: 'Triple Junction', f: 'newton', x: '0.00029882', y: '-0.00067018', s: 0.00266, tour: false },
   { name: 'The Whole Nova', f: 'nova', x: '-0.6', y: '0', s: 0.45 },
   { name: 'Nova Minibrot', f: 'nova', x: '-0.61098958', y: '-0.00022487', s: 0.00365537 },
   { name: 'Nova Shoreline', f: 'nova', x: '-0.35891817', y: '-0.0611454', s: 0.0183 },
