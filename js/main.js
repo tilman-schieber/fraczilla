@@ -1,10 +1,10 @@
-import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=566a4101';
-import { PALETTES, randomPalette } from './palettes.js?v=566a4101';
-import { LOCATIONS, START } from './locations.js?v=566a4101';
-import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=566a4101';
-import { FRACTALS, FAMILIES } from './fractals.js?v=566a4101';
-import { muxWebM } from './webm.js?v=566a4101';
-import { asciiLogoSVG } from './logo.js?v=566a4101';
+import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=1a9f090c';
+import { PALETTES, randomPalette } from './palettes.js?v=1a9f090c';
+import { LOCATIONS, START } from './locations.js?v=1a9f090c';
+import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=1a9f090c';
+import { FRACTALS, FAMILIES } from './fractals.js?v=1a9f090c';
+import { muxWebM } from './webm.js?v=1a9f090c';
+import { asciiLogoSVG } from './logo.js?v=1a9f090c';
 
 const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
@@ -62,7 +62,7 @@ function maxIter() {
 let worker, ref = null, pend = null, reqId = 0;
 function startWorker() {
   if (worker) worker.terminate();
-  worker = new Worker(new URL('./refworker.js?v=566a4101', import.meta.url));
+  worker = new Worker(new URL('./refworker.js?v=1a9f090c', import.meta.url));
   worker.onmessage = (e) => {
     const m = e.data;
     if (!pend || m.id !== pend.id) return;
@@ -1619,7 +1619,7 @@ function typeKeys(e) {
 }
 
 function thumbOrbit(f, maxIter) {
-  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=566a4101', import.meta.url));
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=1a9f090c', import.meta.url));
   return new Promise((resolve) => {
     const id = Math.random();
     thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };
@@ -1637,7 +1637,7 @@ let picWorker = null;
 const picWait = new Map();
 function picOrbit(f, julia, cx, cy, jx, jy, F, maxIter) {
   if (!picWorker) {
-    picWorker = new Worker(new URL('./refworker.js?v=566a4101', import.meta.url));
+    picWorker = new Worker(new URL('./refworker.js?v=1a9f090c', import.meta.url));
     picWorker.onmessage = (e) => { const r = picWait.get(e.data.id); if (r) { picWait.delete(e.data.id); r(e.data); } };
   }
   return new Promise((resolve) => {
@@ -1656,14 +1656,16 @@ async function picture(f, v, w, h, C = colorParams()) {
   const F = Math.min(FB, Math.max(64, Math.ceil(-Math.log2(v.s)) + 56) + 24);
   const m = f.deep ? await picOrbit(f, julia, cx, cy, jx, jy, F, maxIter + 100) : { lenA: 0, offB: 0, lenB: 0 };
   if (f.deep) R.uploadOrbit(m.data, m.count, R.thumbOrbitTex);
-  return R.thumbnail({
+  // C.palData: render with that palette, then put the live one back (the palette is a shared texture)
+  if (C.palData) R.uploadPalette(C.palData);
+  try { return R.thumbnail({
     formula: f.code, julia, refOffX: 0, refOffY: 0, scale: v.s, ySign: f.ySign,
     maxIter, lenA: m.lenA, offB: m.offB, lenB: m.lenB, bail: f.deep ? BAIL : (f.code === 102 || f.code === 103 ? 100 : 256),
     degree: f.degree, orbitTex: R.thumbOrbitTex,
     cX: julia ? toDouble(jx) : toDouble(cx), cY: julia ? toDouble(jy) : toDouble(cy), crit: f.code === 7 ? 0.5 : 0,
     centerX: toDouble(cx), centerY: toDouble(cy), jcX: toDouble(jx), jcY: toDouble(jy),
     seq: seqBits(f.seq), seqLen: (f.seq || 'A').length,
-  }, C, w, h);
+  }, C, w, h); } finally { if (C.palData) R.uploadPalette(S.palData); }
 }
 
 // ---------------------------------------------------------------- live Julia preview
@@ -1707,6 +1709,15 @@ function stepJuliaPreview() {
     .finally(() => { jpv.busy = false; });
 }
 
+// The palette a type opens with (see setFormula/applyLook), or null to keep the current one.
+function lookFor(f) {
+  if (retroSaved) return null;
+  const loc = (f.start && LOCATIONS.find((l) => l.name === f.start)) || LOCATIONS.find((l) => l.f === f.id);
+  if (!loc) return null;
+  const p = PALETTES.find((q) => q.name === (loc.pal || 'Ultra'));
+  return p && { data: p.data, d: loc.d ?? 0, smooth: !p.banded, o: loc.o };
+}
+
 // Render each type's overview with the current palette, one per animation frame.
 async function renderThumbs() {
   const key = JSON.stringify(colorParams());
@@ -1720,9 +1731,12 @@ async function renderThumbs() {
       const ctx = card.querySelector('canvas').getContext('2d');
       let img = thumbCache.get(f.id);
       const start = f.start && LOCATIONS.find((l) => l.name === f.start);
+      // color each card the way the type opens (applyLook), unless retro mode pins the palette
+      const look = lookFor(f), C = colorParams();
+      if (look) { C.density = Math.pow(2, look.d); C.smooth = look.smooth; C.palData = look.data; if (look.o != null) C.offset = look.o; }
       if (!img && start) {
         // types that open on a Julia set show that picture, not the c-plane
-        img = await picture(f, { x: start.x, y: start.y, s: start.s * 1.05, jx: start.jx, jy: start.jy, maxIter: 600 }, THUMB_W, THUMB_H);
+        img = await picture(f, { x: start.x, y: start.y, s: start.s * 1.05, jx: start.jx, jy: start.jy, maxIter: 600 }, THUMB_W, THUMB_H, C);
         thumbCache.set(f.id, img);
         await new Promise((r) => requestAnimationFrame(r));
       }
@@ -1731,12 +1745,14 @@ async function renderThumbs() {
         const m = f.deep ? await thumbOrbit(f, maxIter) : { lenA: 0, offB: 0, lenB: 0 };
         if (f.deep) R.uploadOrbit(m.data, m.count, R.thumbOrbitTex);
         const hx = parseFloat(f.home[0]), hy = parseFloat(f.home[1]);
+        if (C.palData) R.uploadPalette(C.palData);
         img = R.thumbnail({
           formula: f.code, julia: false, refOffX: 0, refOffY: 0, scale: f.home[2] * 1.05, ySign: f.ySign,
           maxIter, lenA: m.lenA, offB: m.offB, lenB: m.lenB, bail: f.deep ? BAIL : (f.code === 102 || f.code === 103 ? 100 : 256),
           degree: f.degree, orbitTex: R.thumbOrbitTex,
           cX: hx, cY: hy, crit: f.code === 7 ? 0.5 : 0, centerX: hx, centerY: hy, seq: seqBits(f.seq), seqLen: (f.seq || 'A').length,
-        }, colorParams(), THUMB_W, THUMB_H);
+        }, C, THUMB_W, THUMB_H);
+        if (C.palData) R.uploadPalette(S.palData);
         thumbCache.set(f.id, img);
         await new Promise((r) => requestAnimationFrame(r));
       }
