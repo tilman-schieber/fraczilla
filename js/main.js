@@ -1,10 +1,10 @@
-import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=1a9f090c';
-import { PALETTES, randomPalette } from './palettes.js?v=1a9f090c';
-import { LOCATIONS, START } from './locations.js?v=1a9f090c';
-import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=1a9f090c';
-import { FRACTALS, FAMILIES } from './fractals.js?v=1a9f090c';
-import { muxWebM } from './webm.js?v=1a9f090c';
-import { asciiLogoSVG } from './logo.js?v=1a9f090c';
+import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=3947e2ef';
+import { PALETTES, randomPalette } from './palettes.js?v=3947e2ef';
+import { LOCATIONS, START } from './locations.js?v=3947e2ef';
+import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=3947e2ef';
+import { FRACTALS, FAMILIES } from './fractals.js?v=3947e2ef';
+import { muxWebM } from './webm.js?v=3947e2ef';
+import { asciiLogoSVG } from './logo.js?v=3947e2ef';
 
 const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
@@ -37,7 +37,7 @@ const S = {
   pal: 0, palData: PALETTES[0].data,
   density: 0, offset: 0, cycling: false, cycleSpeed: 30,
   mapping: 1, smooth: true, light: true, lightAngle: 45, lightStr: 0.55, edge: 0, inside: 0,
-  aa: true, hq: false, autopilot: false, apSpeed: 0.6, flySpeed: 1.4,
+  aa: true, hq: false, flySpeed: 1.4,
 };
 let retroSaved = null;
 let iterFloor = 0; // learned from the probe: how deep the current view really is
@@ -62,7 +62,7 @@ function maxIter() {
 let worker, ref = null, pend = null, reqId = 0;
 function startWorker() {
   if (worker) worker.terminate();
-  worker = new Worker(new URL('./refworker.js?v=1a9f090c', import.meta.url));
+  worker = new Worker(new URL('./refworker.js?v=3947e2ef', import.meta.url));
   worker.onmessage = (e) => {
     const m = e.data;
     if (!pend || m.id !== pend.id) return;
@@ -152,7 +152,7 @@ let viewVer = 1, lowVer = 0, fullVer = 0, fullDone = 0, lowW = 1, lowH = 1, have
 let lowScale = 0.5, stripRows = 32, aaFactor = 2;
 let msPerRow = 0, dtHist = [];
 let lastMove = -1e9, colorDirty = true, lastProbe = 0, probedVer = 0;
-let saveReq = false, dtSmooth = 1 / 60;
+let dtSmooth = 1 / 60;
 
 function invalidate(moving) {
   viewVer++;
@@ -198,7 +198,7 @@ function fractalParams() {
   };
 }
 
-const animating = () => anim.flight || S.autopilot || anim.zoom !== 0 || anim.vx !== 0 || anim.vy !== 0 || pointers.size > 0;
+const animating = () => anim.flight || anim.zoom !== 0 || anim.vx !== 0 || anim.vy !== 0 || pointers.size > 0;
 
 let lastT = performance.now(), fpsCount = 0, fpsT = 0, fps = 0, lastStatus = 0, lastHashVer = 0, lastHashT = 0;
 
@@ -220,7 +220,6 @@ function frame(now) {
 
   ensureRef();
   const refOk = !S.f.deep || (ref && ref.key === refKey());
-  const fullComplete = fullVer === viewVer && fullDone >= R.full.h;
   if (refOk) {
     const moving = now - lastMove < 160 || animating();
     const P = fractalParams();
@@ -250,12 +249,11 @@ function frame(now) {
       R.timeEnd(q, rows);
       fullDone += rows; colorDirty = true;
     }
-    if (lowVer === viewVer && probedVer !== viewVer && now - lastProbe > (S.autopilot ? 180 : 350)) {
+    if (lowVer === viewVer && probedVer !== viewVer && now - lastProbe > 350) {
       lastProbe = now; probedVer = viewVer;
       analyzeProbe(P);
     }
   }
-  if (saveReq && fullComplete) colorDirty = true;
   if (colorDirty && haveLow) {
     R.composite({
       ...colorParams(),
@@ -263,7 +261,6 @@ function frame(now) {
       doneY: Math.ceil((R.full.h - fullDone) / aaFactor),
     });
     colorDirty = false;
-    if (saveReq && fullComplete) { saveReq = false; doSave(); }
   }
   if (now - lastStatus > 120) { lastStatus = now; updateStatus(refOk); }
   if (!animating() && now - lastMove > 600 && lastHashVer !== viewVer && now - lastHashT > 500) {
@@ -272,8 +269,7 @@ function frame(now) {
   requestAnimationFrame(frame);
 }
 
-// ---------------------------------------------------------------- probe: smarter reference + autopilot steering
-let apTarget = null;
+// ---------------------------------------------------------------- probe: smarter reference, auto iterations
 function analyzeProbe(P) {
   const pw = Math.min(PROBE_MAXW, Math.max(16, Math.round(PROBE_H * R.canvas.width / R.canvas.height)));
   const buf = R.probe(P, pw);
@@ -311,131 +307,9 @@ function analyzeProbe(P) {
       requestRef(S.cx + fromDouble(ox), S.cy + fromDouble(oy), true);
     }
   }
-  if (S.autopilot) {
-    if (maxIdx < 0) { if (S.iterAuto && maxIter() < 100000) return; stopAutopilot('Autopilot: swallowed by the set. Zoom out and try again!'); return; }
-    if (S.f.chaotic) { autopilotChoose(P, buf, pw, maxEsc, pt); return; }
-    // smooth (holomorphic) formulas: deepest escaping pixels near the centre, stay close to the previous target
-    const thr = maxEsc - Math.max(2, maxEsc * 0.06);
-    const [tx0, ty0] = apTarget ? [toDouble(apTarget.x - S.cx), toDouble(apTarget.y - S.cy)] : [0, 0];
-    let best = -1, bestD = Infinity;
-    for (let i = 0; i < n; i++) {
-      const mu = buf[i * 4];
-      if (mu < thr) continue;
-      const px = i % pw, py = Math.floor(i / pw);
-      if (Math.abs(px + 0.5 - pw / 2) > pw * 0.35 || Math.abs(py + 0.5 - PROBE_H / 2) > PROBE_H * 0.35) continue;
-      const [x, y] = pt(i), d = (x - tx0) ** 2 + (y - ty0) ** 2;
-      if (d < bestD) { bestD = d; best = i; }
-    }
-    if (best < 0) best = maxIdx;
-    const [ox, oy] = pt(best);
-    apTarget = { x: S.cx + fromDouble(ox), y: S.cy + fromDouble(oy) };
-  }
 }
 
-// How chaotic is a probe image? Fraction of neighbouring pixel pairs that jump
-// (escape-time discontinuity or inside/outside flip). Low = coherent structure.
-function speckle(buf, pw) {
-  const H = PROBE_H;
-  let jumps = 0, pairs = 0, esc = 0, lo = Infinity, hi = -1;
-  for (let y = 0; y < H; y++) for (let x = 0; x < pw; x++) {
-    const m = buf[(y * pw + x) * 4];
-    if (m >= 0) { esc++; lo = Math.min(lo, m); hi = Math.max(hi, m); }
-    for (const [dx, dy] of [[1, 0], [0, 1]]) {
-      if (x + dx >= pw || y + dy >= H) continue;
-      const v = buf[((y + dy) * pw + x + dx) * 4];
-      pairs++;
-      if ((m < 0) !== (v < 0)) jumps++;
-      else if (m >= 0 && Math.abs(m - v) > Math.max(3, 0.08 * Math.max(m, v))) jumps++;
-    }
-  }
-  return { sp: jumps / pairs, escFrac: esc / (pw * H), range: hi - lo };
-}
-
-// Small black islands (miniature copies of the set) that don't touch the border.
-function islands(buf, pw) {
-  const H = PROBE_H, n = pw * H, seen = new Uint8Array(n), out = [];
-  for (let s0 = 0; s0 < n; s0++) {
-    if (seen[s0] || buf[s0 * 4] >= 0) continue;
-    const stack = [s0]; seen[s0] = 1;
-    let size = 0, sx = 0, sy = 0, edge = false;
-    while (stack.length) {
-      const i = stack.pop(), x = i % pw, y = (i / pw) | 0;
-      size++; sx += x; sy += y;
-      if (x === 0 || y === 0 || x === pw - 1 || y === H - 1) edge = true;
-      for (const j of [i - 1, i + 1, i - pw, i + pw]) {
-        if (j < 0 || j >= n || seen[j] || buf[j * 4] >= 0) continue;
-        if (Math.abs((j % pw) - x) > 1) continue;
-        seen[j] = 1; stack.push(j);
-      }
-    }
-    if (!edge && size <= n * 0.03) out.push({ x: sx / size, y: sy / size, size });
-  }
-  // lots of tiny specks = chaotic noise, not miniature copies
-  if (out.length > 25) return [];
-  return out.filter((c) => c.size >= 3);
-}
-
-let apLastChoice = 0, apReverseUntil = 0;
-function autopilotChoose(P, buf, pw, maxEsc, pt) {
-  const now = performance.now();
-  if (apTarget && now - apLastChoice < 1200) return;
-  apLastChoice = now;
-  const H = PROBE_H, n = pw * H;
-  const pp = 2 * S.scale / H;
-  const toOff = (x, y) => [(x + 0.5 - pw / 2) * pp, (y + 0.5 - H / 2) * pp * S.f.ySign];
-  const here = speckle(buf, pw);
-  const [tx, ty] = apTarget ? [toDouble(apTarget.x - S.cx), toDouble(apTarget.y - S.cy)] : [0, 0];
-
-  // candidates: miniature copies (islands), deep spread-out pixels, and the current target
-  const offs = [];
-  const isl = islands(buf, pw)
-    .filter((c) => Math.abs(c.x + 0.5 - pw / 2) < pw * 0.42 && Math.abs(c.y + 0.5 - H / 2) < H * 0.42)
-    .map((c) => ({ off: toOff(c.x, c.y), island: true }));
-  isl.sort((a, b) => ((a.off[0] - tx) ** 2 + (a.off[1] - ty) ** 2) - ((b.off[0] - tx) ** 2 + (b.off[1] - ty) ** 2));
-  offs.push(...isl.slice(0, 4));
-  let mnEsc = Infinity;
-  for (let i = 0; i < n; i++) { const mu = buf[i * 4]; if (mu >= 0 && mu < mnEsc) mnEsc = mu; }
-  const thr = mnEsc + 0.5 * (maxEsc - mnEsc);
-  const cand = [];
-  for (let i = 0; i < n; i++) {
-    const mu = buf[i * 4], px = i % pw, py = Math.floor(i / pw);
-    if (mu < thr || Math.abs(px + 0.5 - pw / 2) > pw * 0.38 || Math.abs(py + 0.5 - H / 2) > H * 0.38) continue;
-    cand.push([mu, px, py, i]);
-  }
-  cand.sort((a, b) => b[0] - a[0]);
-  const picks = [];
-  for (const c of cand) {
-    if (picks.length >= 6) break;
-    if (picks.every((p) => Math.abs(p[1] - c[1]) + Math.abs(p[2] - c[2]) > 7)) picks.push(c);
-  }
-  offs.push(...picks.map((c) => ({ off: pt(c[3]) })));
-  if (apTarget) offs.push({ off: [tx, ty], current: true });
-  if (!offs.length) return;
-
-  // look ahead: preview a few times deeper at each candidate; reject chaos, reward structure
-  let best = null, bestScore = -Infinity, calm = null, calmSp = Infinity;
-  const lw = 48;
-  for (const c of offs) {
-    const [ox, oy] = c.off;
-    const Q = { ...P, refOffX: P.refOffX + ox, refOffY: P.refOffY + oy, centerX: P.centerX + ox, centerY: P.centerY + oy, scale: S.scale / 4 };
-    const pb = R.probe(Q, lw);
-    const st = speckle(pb, lw);
-    if (st.sp < calmSp) { calmSp = st.sp; calm = c.off; }
-    if (st.sp > 0.2 || st.escFrac < 0.12 || st.range < 4) continue;
-    const nIsl = islands(pb, lw).length;
-    const score = -st.sp + (c.island ? 0.3 : 0) + 0.2 * Math.min(nIsl, 4) / 4 + (c.current ? 0.05 : 0);
-    if (score > bestScore) { bestScore = score; best = c.off; }
-  }
-  if (!best) {
-    // everything ahead is chaos or swallowed by the set: back out and look for another way in
-    apReverseUntil = now + 1600;
-    apLastChoice = now + 400 - 1200; // re-evaluate right after backing out
-    best = calm && (here.sp > 0.2 || here.escFrac < 0.12) ? [0, 0] : (calm || [0, 0]);
-  }
-  apTarget = { x: S.cx + fromDouble(best[0]), y: S.cy + fromDouble(best[1]) };
-}
-
-// ---------------------------------------------------------------- animation: wheel zoom, inertia, flights, autopilot
+// ---------------------------------------------------------------- animation: wheel zoom, inertia, flights
 const anim = { zoom: 0, ax: 0, ay: 0, vx: 0, vy: 0, flight: null };
 
 function animate(dt) {
@@ -460,13 +334,11 @@ function animate(dt) {
   }
   if (anim.flight) { stepFlight(dt); moved = true; }
   stepLook(dt);
-  if (S.autopilot) { stepAutopilot(dt); moved = true; }
   if (moved) invalidate(true);
 }
 
 function stopMotion() {
   anim.zoom = 0; anim.vx = anim.vy = 0; anim.flight = null;
-  if (S.autopilot) stopAutopilot();
 }
 
 function flyTo(x, y, s) {
@@ -512,28 +384,6 @@ function stepFlight(dt) {
   } else {
     const rem = k * Math.cosh(f.r0) * Math.sinh(f.rho * (f.S - s)) / (Math.cosh(f.rho * f.S + f.r0) * Math.cosh(A));
     S.cx = f.tx - fromDouble(f.dirx * rem); S.cy = f.ty - fromDouble(f.diry * rem);
-  }
-}
-
-function startAutopilot() {
-  anim.flight = null; anim.zoom = 0;
-  S.autopilot = true; apTarget = null;
-  toast('AUTOPILOT ENGAGED — diving toward the deepest detail');
-  syncUI();
-}
-function stopAutopilot(msg) {
-  S.autopilot = false; apTarget = null;
-  if (msg) toast(msg);
-  syncUI();
-}
-function stepAutopilot(dt) {
-  const f = Math.exp((performance.now() < apReverseUntil ? 1.5 : -1) * S.apSpeed * dt);
-  if (S.scale * f < minScale()) { stopAutopilot(S.f.deep ? 'Precision floor reached at 10³⁰× — what a dive!' : 'Zoom limit for this type (10¹⁰×): double-float precision floor'); return; }
-  S.scale = Math.min(MAX_SCALE, S.scale * f);
-  if (apTarget) {
-    const k = 1 - Math.exp(-dt * 1.6);
-    S.cx += fromDouble(toDouble(apTarget.x - S.cx) * k);
-    S.cy += fromDouble(toDouble(apTarget.y - S.cy) * k);
   }
 }
 
@@ -687,22 +537,6 @@ function resetView() {
   invalidate(false);
 }
 
-function save() {
-  saveReq = true;
-  toast('SAVING… (waiting for the full-quality render)');
-}
-function doSave() {
-  canvas.toBlob((b) => {
-    if (!b) return;
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(b);
-    a.download = `fraczilla-${S.f.id}${S.julia ? '-julia' : ''}-${Date.now()}.png`;
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
-    toast('SAVED PNG');
-  }, 'image/png');
-}
-
 // ---------------------------------------------------------------- URL hash state
 function coordDigits() { return Math.min(60, Math.max(8, Math.ceil(-Math.log10(S.scale)) + 4)); }
 function writeHash() {
@@ -793,7 +627,6 @@ canvas.addEventListener('wheel', (e) => {
   let d = e.deltaY;
   if (e.deltaMode === 1) d *= 16; else if (e.deltaMode === 2) d *= 400;
   if (anim.flight) anim.flight = null;
-  if (S.autopilot) stopAutopilot();
   anim.zoom = Math.max(-5, Math.min(5, anim.zoom + d * (e.ctrlKey ? 0.01 : 0.0018)));
   anim.ax = e.offsetX; anim.ay = e.offsetY;
 }, { passive: false });
@@ -821,7 +654,6 @@ window.addEventListener('keydown', (e) => {
   switch (k) {
     case ' ': toggleJulia(mouse?.x, mouse?.y); break;
     case 'j': case 'J': setJuliaPreview(!jpv.on); break;
-    case 'a': case 'A': S.autopilot ? stopAutopilot('AUTOPILOT OFF') : startAutopilot(); break;
     case 't': case 'T': { const js = currentJourneys(); goLocation(js[(locIdx = (locIdx + 1) % js.length)]); } break;
     case 'c': case 'C': S.cycling = !S.cycling; toast(S.cycling ? 'COLOR CYCLING ON (+/− speed)' : 'COLOR CYCLING OFF'); syncUI(); break;
     case '+': case '=': S.cycleSpeed = Math.min(120, S.cycleSpeed + 10); S.cycling = true; toast(`CYCLE SPEED ${S.cycleSpeed}`); syncUI(); break;
@@ -836,7 +668,7 @@ window.addEventListener('keydown', (e) => {
     case 'b': case 'B': S.smooth = !S.smooth; colorDirty = true; syncUI(); break;
     case 'd': case 'D': S.light = !S.light; colorDirty = true; syncUI(); break;
     case 'r': case 'R': toggleRetro(); break;
-    case 's': case 'S': save(); break;
+    case 's': case 'S': if (!hq) renderImage(); break; // at the render panel's size (WINDOW by default)
     case 'v': case 'V': renderOpen() ? closeRender() : openRender(); break;
     case 'l': case 'L': copyLink(); break;
     case 'Home': resetView(); break;
@@ -898,7 +730,6 @@ function updateStatus(refOk) {
   if (hq) prog = hq.phase === 'render' ? `PRERENDERING ${hq.k}/${hq.K + 1} · ESC CANCELS` : hq.phase === 'encode' ? `ENCODING VIDEO ${Math.floor(100 * hq.vDone / Math.max(1, hq.vFrames))}%` : 'FULL-QUALITY JOURNEY · ESC STOPS';
   else   if (!refOk) prog = 'COMPUTING REFERENCE…';
   else if (fullVer === viewVer && fullDone < R.full.h && lowVer === viewVer) prog = `REFINING ${Math.floor(100 * fullDone / R.full.h)}%`;
-  else if (S.autopilot) prog = 'AUTOPILOT';
   $('#stProg').textContent = prog;
   if (S.iterAuto) { $('#iter').value = Math.log10(maxIter()); $('#iterLabel').textContent = `MAX ${maxIter()}`; }
   if (S.cycling) $('#offset').value = S.offset;
@@ -964,7 +795,6 @@ function buildUI() {
   $('#randPal').onclick = () => setPalette(-1, randomPalette().data);
   $('#cycleBtn').onclick = () => { S.cycling = !S.cycling; syncUI(); };
   $('#retroBtn').onclick = toggleRetro;
-  $('#autoBtn').onclick = () => (S.autopilot ? stopAutopilot() : startAutopilot());
 
   const bindRange = (id, key, after) => {
     const el = $('#' + id);
@@ -976,7 +806,6 @@ function buildUI() {
   bindRange('lightAngle', 'lightAngle');
   bindRange('lightStr', 'lightStr');
   bindRange('edge', 'edge');
-  bindRange('apSpeed', 'apSpeed');
   bindRange('flySpeed', 'flySpeed');
   $('#mapping').onchange = (e) => { S.mapping = +e.target.value; colorDirty = true; };
   $('#inside').onchange = (e) => { S.inside = +e.target.value; colorDirty = true; };
@@ -1011,7 +840,6 @@ function buildUI() {
     $('#iterLabel').textContent = `MAX ${S.iterManual}`;
     invalidate(false);
   });
-  $('#saveBtn').onclick = save;
   $('#linkBtn').onclick = copyLink;
   $('#resetBtn').onclick = resetView;
   $('#helpBtn').onclick = () => $('#help').classList.remove('hidden');
@@ -1101,8 +929,6 @@ function syncUI() {
   }
   $('#cycleBtn').classList.toggle('on', S.cycling);
   $('#retroBtn').classList.toggle('on', !!retroSaved);
-  $('#autoBtn').classList.toggle('on', S.autopilot);
-  $('#autoBtn').firstChild.textContent = S.autopilot ? '■ STOP AUTOPILOT ' : '▶ AUTOPILOT DIVE ';
   $('#cycleSpeed').value = S.cycleSpeed;
   $('#density').value = S.density;
   $('#offset').value = S.offset;
@@ -1138,7 +964,7 @@ async function waitSettled() {
   for (;;) {
     await nextFrame();
     if (!hq || hq.cancel) return false;
-    const done = () => ref && ref.key === refKey() && !pend && lowVer === viewVer && fullVer === viewVer && fullDone >= R.full.h && probedVer === viewVer;
+    const done = () => (!S.f.deep || (ref && ref.key === refKey())) && !pend && lowVer === viewVer && fullVer === viewVer && fullDone >= R.full.h && probedVer === viewVer;
     if (done()) { await nextFrame(); await nextFrame(); if (done()) return true; }
   }
 }
@@ -1619,7 +1445,7 @@ function typeKeys(e) {
 }
 
 function thumbOrbit(f, maxIter) {
-  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=1a9f090c', import.meta.url));
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=3947e2ef', import.meta.url));
   return new Promise((resolve) => {
     const id = Math.random();
     thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };
@@ -1637,7 +1463,7 @@ let picWorker = null;
 const picWait = new Map();
 function picOrbit(f, julia, cx, cy, jx, jy, F, maxIter) {
   if (!picWorker) {
-    picWorker = new Worker(new URL('./refworker.js?v=1a9f090c', import.meta.url));
+    picWorker = new Worker(new URL('./refworker.js?v=3947e2ef', import.meta.url));
     picWorker.onmessage = (e) => { const r = picWait.get(e.data.id); if (r) { picWait.delete(e.data.id); r(e.data); } };
   }
   return new Promise((resolve) => {
@@ -1684,7 +1510,7 @@ function hideJuliaPreview() {
   jpv.el.classList.add('hidden'); jpv.shown = false; jpv.key = '';
 }
 function stepJuliaPreview() {
-  if (!jpv.on || !mouse || S.julia || S.f.julia === false || pointers.size || anim.flight || S.autopilot ||
+  if (!jpv.on || !mouse || S.julia || S.f.julia === false || pointers.size || anim.flight ||
       typesOpen() || hq || renderOpen() || !$('#help').classList.contains('hidden')) { hideJuliaPreview(); return; }
   const W = jpv.el.offsetWidth || 256, H = jpv.el.offsetHeight || 210;
   let x = mouse.x + 28, y = mouse.y + 28;

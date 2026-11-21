@@ -4,7 +4,7 @@
 //
 // code:    formula id in the shader and reference worker
 // deep:    supports perturbation deep zoom (to ~10^30)
-// chaotic: abs()-style formula with noisy regions (autopilot looks ahead)
+// chaotic: abs()-style formula with noisy regions (no meaningful "mirror of c")
 // quick:   shown as a quick pick in the panel
 // julia:   false if the type has no Julia counterpart
 // juliaHome: overview of its Julia sets (default 0, 0, 1.6)
