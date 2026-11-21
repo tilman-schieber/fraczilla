@@ -14,6 +14,7 @@
 <body>
 <canvas id="c"></canvas>
 <canvas id="movie" class="hidden"></canvas>
+<video id="movieVideo" class="hidden" muted playsinline></video>
 
 <div id="logo" class="hud">FRACZILLA</div>
 <button id="menuBtn" class="hud btn" title="Menu (Tab)">≡ MENU</button>
@@ -50,6 +51,10 @@
       <button id="autoBtn" class="btn wide" title="A">▶ AUTOPILOT DIVE <kbd>A</kbd></button>
     </div>
     <div class="row checks"><label title="Render the dive in full quality first, then play it back smoothly"><input id="hq" type="checkbox"> PRERENDER (FULL QUALITY)</label></div>
+    <div class="row">
+      <button id="shareBtn" class="btn wide" title="Copy a link that replays a dive to this view">🔗 SHARE DIVE TO HERE</button>
+      <button id="videoBtn" class="btn hidden" title="Download the last prerendered journey">⬇ VIDEO</button>
+    </div>
     <div class="row"><label>DIVE SPEED</label><input id="apSpeed" type="range" min="0.1" max="2" step="0.05" value="0.6"></div>
     <div class="row"><label>FLIGHT SPEED</label><input id="flySpeed" type="range" min="0.3" max="4" step="0.1" value="1.4"></div>
   </div>
@@ -153,6 +158,18 @@
     <div id="typeList"></div>
     <p id="typeEmpty" class="dim hidden">No fractal type matches that search.</p>
     <div class="small dim type-foot">↑↓←→ move · ENTER picks · ESC closes · <span class="badge">DEEP ZOOM ✓</span> zooms to 10<sup>30</sup>×</div>
+  </div>
+</div>
+
+<div id="hqDlg" class="modal hidden" role="dialog" aria-label="Prerendering journey">
+  <div class="box modal-box hq-box">
+    <div class="box-title">PRERENDERING JOURNEY</div>
+    <div id="hqName" class="hq-name"></div>
+    <div class="hq-row"><span class="hq-lab">KEYFRAMES</span><span id="hqBar1" class="hq-bar"></span><span id="hqTxt1" class="hq-num"></span></div>
+    <div class="hq-row"><span class="hq-lab">VIDEO</span><span id="hqBar2" class="hq-bar"></span><span id="hqTxt2" class="hq-num"></span></div>
+    <div id="hqEta" class="small dim hq-eta"></div>
+    <p class="small dim">Every frame is rendered at full anti-aliased quality, then the whole flight is encoded as a 60 fps video that plays back perfectly smoothly. You can save it afterwards.</p>
+    <div class="center"><button class="btn" id="hqCancel">CANCEL <kbd>ESC</kbd></button></div>
   </div>
 </div>
 

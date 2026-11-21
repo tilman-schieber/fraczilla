@@ -3,6 +3,7 @@ import { PALETTES, randomPalette } from './palettes.js';
 import { LOCATIONS, JULIAS } from './locations.js';
 import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js';
 import { FRACTALS, FAMILIES } from './fractals.js';
+import { muxWebM } from './webm.js';
 
 const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
@@ -526,16 +527,32 @@ function setJulia(jx, jy) {
 let locIdx = 0;
 
 function goLocation(loc) {
-  if (loc.julia) {
-    setJulia(parseFixed(loc.julia.x), parseFixed(loc.julia.y));
-    toast(`JULIA SET: ${loc.name.toUpperCase()}`);
-    return;
-  }
+  if (loc.inJulia) { startJourney({ name: loc.name, cx: loc.cx, cy: loc.cy, s: loc.s }); return; }
   const f = FORMULAS.find((q) => q.id === loc.f) || FORMULAS[0];
   if (f !== S.f || S.julia) { setFormula(f); }
-  if (S.hq) { prerenderJourney(loc); return; }
-  flyTo(parseFixed(loc.x), parseFixed(loc.y), loc.s);
-  toast(`FLYING TO ${loc.name.toUpperCase()}`);
+  startJourney({ name: loc.name, cx: parseFixed(loc.x), cy: parseFixed(loc.y), s: loc.s });
+}
+
+// Fly (or prerender, then play) from wherever we are to target {name, cx, cy, s}.
+function startJourney(t) {
+  if (S.hq) { prerenderJourney(t); return; }
+  flyTo(t.cx, t.cy, t.s);
+  toast(`FLYING TO ${t.name.toUpperCase()}`);
+}
+
+const homeScale = () => (S.julia ? JULIA_SCALE : S.f.home[2]);
+
+// A link that replays a dive from the overview to the current view, with the current colors.
+function journeyLink() {
+  writeHash();
+  return `${location.href.split('#')[0]}${location.hash}&dive=1${S.hq ? '&hq=1' : ''}`;
+}
+async function shareJourney() {
+  const url = journeyLink();
+  try {
+    if (navigator.share && matchMedia('(pointer: coarse)').matches) await navigator.share({ title: 'Fraczilla dive', url });
+    else { await navigator.clipboard.writeText(url); toast('LINK COPIED: IT REPLAYS THE DIVE TO THIS VIEW'); }
+  } catch { toast('COPY FAILED — use COPY LINK'); }
 }
 
 function setPalette(i, data) {
@@ -769,7 +786,7 @@ function updateStatus(refOk) {
   $('#stIter').textContent = maxIter();
   $('#stFps').textContent = `${fps} FPS`;
   let prog = '';
-  if (hq) prog = hq.phase === 'render' ? `PRERENDERING ${hq.k}/${hq.K + 1} · ESC CANCELS` : 'FULL-QUALITY JOURNEY · ESC STOPS';
+  if (hq) prog = hq.phase === 'render' ? `PRERENDERING ${hq.k}/${hq.K + 1} · ESC CANCELS` : hq.phase === 'encode' ? `ENCODING VIDEO ${Math.floor(100 * hq.vDone / Math.max(1, hq.vFrames))}%` : 'FULL-QUALITY JOURNEY · ESC STOPS';
   else   if (!refOk) prog = 'COMPUTING REFERENCE…';
   else if (fullVer === viewVer && fullDone < R.full.h && lowVer === viewVer) prog = `REFINING ${Math.floor(100 * fullDone / R.full.h)}%`;
   else if (S.autopilot) prog = 'AUTOPILOT';
@@ -836,6 +853,11 @@ function buildUI() {
   $('#light').onchange = (e) => { S.light = e.target.checked; colorDirty = true; };
   $('#aa').onchange = (e) => { S.aa = e.target.checked; resize(); };
   $('#hq').onchange = (e) => { S.hq = e.target.checked; };
+  $('#shareBtn').onclick = shareJourney;
+  $('#videoBtn').onclick = saveVideo;
+  $('#hqCancel').onclick = cancelHQ;
+  movieVideo.onclick = cancelHQ;
+  movie.onclick = cancelHQ;
   $('#iterAuto').onchange = (e) => {
     S.iterAuto = e.target.checked;
     if (!S.iterAuto) S.iterManual = maxIter();
@@ -859,23 +881,48 @@ function buildUI() {
 }
 
 let shownLocKey = '';
+// Distance from c to the (multi)brot set, in plain doubles; 0 if c seems to be inside.
+function setDistance(cx, cy, p) {
+  let x = 0, y = 0, dx = 0, dy = 0;
+  for (let i = 0; i < 20000; i++) {
+    // dz = p z^(p-1) dz + 1 ; z = z^p + c
+    let px = 1, py = 0;
+    for (let k = 0; k < p - 1; k++) [px, py] = [px * x - py * y, px * y + py * x];
+    [dx, dy] = [p * (px * dx - py * dy) + 1, p * (px * dy + py * dx)];
+    const zx = px * x - py * y, zy = px * y + py * x;
+    x = zx + cx; y = zy + cy;
+    const r2 = x * x + y * y;
+    if (r2 > 1e12) { const r = Math.sqrt(r2); return r * Math.log(r) / Math.hypot(dx, dy); }
+  }
+  return 0;
+}
+
+// Flights inside the current Julia set (these work for any c).
+function juliaJourneys() {
+  const list = [{ name: 'The Whole Julia Set', inJulia: true, cx: 0n, cy: 0n, s: JULIA_SCALE }];
+  if (!S.f.chaotic) {
+    // Near z = c, the Julia set mirrors the Mandelbrot set around c (Tan Lei).
+    const d = setDistance(toDouble(S.jx), toDouble(S.jy), S.f.degree);
+    if (d > 0) list.push({ name: 'Mirror of c', inJulia: true, cx: S.jx, cy: S.jy, s: Math.max(1e-13, Math.min(0.05, d * 20)) });
+  }
+  return list;
+}
+
 function currentJourneys() {
-  if (S.julia) return JULIAS.map((j) => ({ name: j.name, julia: j }));
+  if (S.julia) return juliaJourneys();
   return LOCATIONS.filter((l) => l.f === S.f.id);
 }
 function buildLocations() {
-  const key = S.f.id + (S.julia ? 'J' : '');
+  const key = S.f.id + (S.julia ? `J${S.jx},${S.jy}` : '');
   if (key === shownLocKey) return;
   shownLocKey = key;
   const lwrap = $('#locations');
   lwrap.innerHTML = '';
   currentJourneys().forEach((loc, i) => {
     const b = document.createElement('button');
-    if (loc.julia) b.innerHTML = `${loc.name}<span class="tag">JULIA</span>`;
-    else {
-      const mag = HOME_SCALE / loc.s;
-      b.innerHTML = `${loc.name}<span class="tag">${mag < 1e4 ? Math.round(mag) + '×' : '10^' + Math.round(Math.log10(mag))}</span>`;
-    }
+    const mag = (loc.inJulia ? JULIA_SCALE : HOME_SCALE) / loc.s;
+    b.innerHTML = `${loc.name}<span class="tag">${mag < 1e4 ? Math.round(mag) + '×' : '10^' + Math.round(Math.log10(mag))}</span>`;
+    if (loc.name === 'Mirror of c') b.title = 'Near z = c, a Julia set echoes the Mandelbrot set around c';
     b.onclick = () => { locIdx = i; goLocation(loc); };
     lwrap.appendChild(b);
   });
@@ -906,6 +953,7 @@ function syncUI() {
   $('#edge').value = S.edge;
   $('#iterAuto').checked = S.iterAuto;
   $('#hq').checked = S.hq;
+  $('#videoBtn').classList.toggle('hidden', !lastVideo);
   $('#iter').value = Math.log10(maxIter());
   $('#iterLabel').textContent = `MAX ${maxIter()}`;
 }
@@ -913,13 +961,16 @@ function syncUI() {
 canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); fatal('The GPU context was lost (driver reset). Reload the page to continue.'); });
 
 // ---------------------------------------------------------------- prerendered (full-quality) journeys
-// A straight dive into the destination, rendered as keyframes one octave apart at
-// the full anti-aliased resolution, then played back by scaling the keyframes.
-// No keyframe is ever enlarged past its native resolution, so every frame is sharp.
-const movie = $('#movie');
+// A straight dive into the destination, rendered as anti-aliased keyframes one
+// octave apart, then composed into a 60 fps video (WebCodecs) that plays back
+// perfectly smoothly and can be saved. No keyframe is ever enlarged past its
+// native resolution, so every frame is sharp. Without WebCodecs we fall back to
+// drawing the keyframes live.
+const movie = $('#movie'), movieVideo = $('#movieVideo');
 const hqCache = new Map();
-let hq = null;
+let hq = null, lastVideo = null;
 const nextFrame = () => new Promise((r) => requestAnimationFrame(r));
+const FPS = 60;
 
 async function waitSettled() {
   for (;;) {
@@ -932,97 +983,244 @@ async function waitSettled() {
 
 function cancelHQ() {
   if (!hq) return;
-  hq.cancel = true;
-  if (hq.phase === 'play' && hq.liveScale) { S.cx = hq.tx; S.cy = hq.ty; S.scale = hq.liveScale; invalidate(false); }
-  movie.classList.add('hidden');
+  const job = hq;
+  job.cancel = true;
   hq = null;
+  hideLoading();
+  if (job.phase === 'play') {
+    movieVideo.pause();
+    if (job.liveScale) { S.cx = job.tx; S.cy = job.ty; S.scale = job.liveScale; invalidate(false); }
+  }
+  movie.classList.add('hidden'); movieVideo.classList.add('hidden');
   toast('JOURNEY STOPPED');
 }
 
-async function prerenderJourney(loc) {
+// ---- loading screen
+const bar = (f, n = 28) => { const k = Math.round(Math.max(0, Math.min(1, f)) * n); return '█'.repeat(k) + '░'.repeat(n - k); };
+const fmtT = (sec) => (sec < 60 ? `${Math.ceil(sec)} s` : `${Math.floor(sec / 60)} min ${Math.round(sec % 60)} s`);
+function showLoading(job) {
+  $('#hqName').textContent = job.name.toUpperCase();
+  $('#hqDlg').classList.remove('hidden');
+  updateLoading(job);
+}
+function hideLoading() { $('#hqDlg').classList.add('hidden'); }
+function updateLoading(job) {
+  const kf = job.k / (job.K + 1), vf = job.vFrames ? job.vDone / job.vFrames : 0;
+  $('#hqBar1').textContent = bar(kf);
+  $('#hqTxt1').textContent = `${job.k}/${job.K + 1}`;
+  $('#hqBar2').textContent = bar(vf);
+  $('#hqTxt2').textContent = job.vFrames ? `${Math.floor(vf * 100)}%` : (job.video ? 'WAITING' : 'N/A');
+  // ETA: deep keyframes get slower, so extrapolate from the recent keyframe pace
+  const now = performance.now();
+  let eta = '';
+  if (job.phase === 'render' && job.k > 2) {
+    const recent = job.kTimes.slice(-6), per = (recent[recent.length - 1] - recent[0]) / Math.max(1, recent.length - 1) / 1000;
+    const encode = job.video ? job.T / 1.2 : 0; // encoding runs roughly at real time+
+    eta = `≈ ${fmtT(per * (job.K + 1 - job.k) * 1.15 + encode)} LEFT`;
+  } else if (job.phase === 'encode' && job.vDone > 30) {
+    const per = (now - job.vStart) / job.vDone / 1000;
+    eta = `≈ ${fmtT(per * (job.vFrames - job.vDone))} LEFT`;
+  }
+  $('#hqEta').textContent = `${job.phase === 'render' ? 'RENDERING KEYFRAMES' : job.phase === 'encode' ? 'ENCODING VIDEO' : ''} ${eta}  ·  ELAPSED ${fmtT((now - job.t0) / 1000)}`;
+}
+
+function videoConfig(w, h) {
+  if (!('VideoEncoder' in window) || !('VideoFrame' in window)) return null;
+  const bitrate = Math.round(w * h * FPS * 0.22); // fractal detail needs a generous bitrate
+  return [
+    { codec: 'vp09.00.51.08', id: 'V_VP9' },
+    { codec: 'vp09.00.41.08', id: 'V_VP9' },
+    { codec: 'vp8', id: 'V_VP8' },
+  ].map((c) => ({ id: c.id, cfg: { codec: c.codec, width: w, height: h, bitrate, framerate: FPS } }));
+}
+
+async function prerenderJourney(t) {
   stopMotion();
-  const tx = parseFixed(loc.x), ty = parseFixed(loc.y);
-  const s0 = Math.max(S.f.home[2], loc.s * 2), s1 = loc.s;
+  const s0 = Math.max(homeScale(), t.s * 2), s1 = t.s;
   const K = Math.max(1, Math.ceil(Math.log2(s0 / s1)));
   const r = Math.pow(s0 / s1, 1 / K);
   const scales = Array.from({ length: K + 1 }, (_, k) => s0 / Math.pow(r, k));
   const C = colorParams();
-  const key = `${loc.f}|${loc.x}|${loc.y}|${loc.s}|${S.pal}|${JSON.stringify(C)}|${R.full.w}x${R.full.h}`;
-  hq = { phase: 'render', k: 0, K, tx, ty, cancel: false };
-  const job = hq;
-  let frames = S.pal >= 0 && hqCache.get(key);
-  if (!frames) {
-    toast(`PRERENDERING ${loc.name.toUpperCase()} (${K + 1} KEYFRAMES)`);
-    frames = [];
+  // octaves per second from the flight-speed slider; ease in and out over `a` seconds
+  const speed = 0.85 * S.flySpeed, a = Math.min(1.5, K / speed / 3);
+  const T = K / speed + a, vmax = K / (T - a);
+  const pos = (x) => Math.max(0, Math.min(K, x < a ? vmax * x * x / (2 * a) : x < T - a ? vmax * (x - a / 2) : K - vmax * (T - x) ** 2 / (2 * a)));
+  const key = `${refKey()}|${t.cx}|${t.cy}|${t.s}|${S.pal}|${JSON.stringify(C)}|${R.full.w}x${R.full.h}|${S.flySpeed}`;
+  const job = hq = {
+    phase: 'render', k: 0, K, tx: t.cx, ty: t.cy, name: t.name, cancel: false, scales, r, T, pos,
+    t0: performance.now(), kTimes: [], video: true, vFrames: 0, vDone: 0,
+  };
+  const cached = S.pal >= 0 && hqCache.get(key);
+  if (cached) { await playVideo(job, cached); return; }
+
+  showLoading(job);
+  const tick = setInterval(() => hq === job && updateLoading(job), 250);
+  try {
+    const frames = [];
     for (let k = 0; k <= K; k++) {
-      S.cx = tx; S.cy = ty; S.scale = scales[k];
+      S.cx = t.cx; S.cy = t.cy; S.scale = scales[k];
       invalidate(false);
       if (!(await waitSettled()) || job.cancel) return;
       const img = R.colorize(R.full, R.full.w, R.full.h, C);
       const oc = new OffscreenCanvas(img.width, img.height);
       oc.getContext('2d').putImageData(img, 0, 0);
       frames.push(await oc.convertToBlob({ type: 'image/webp', quality: 0.92 }));
-      job.k = k + 1;
+      job.k = k + 1; job.kTimes.push(performance.now());
     }
-    if (S.pal >= 0) hqCache.set(key, frames);
+    let video = null;
+    try { video = await encodeJourney(job, frames); } catch (e) { console.warn('video encoding failed, playing keyframes live', e); }
+    if (job.cancel) return;
+    hideLoading();
+    if (video) {
+      if (S.pal >= 0) hqCache.set(key, video);
+      await playVideo(job, video);
+    } else {
+      job.video = false;
+      await playKeyframes(job, frames);
+    }
+  } finally {
+    clearInterval(tick);
+    if (hq === job && job.phase !== 'play') hideLoading();
   }
-  if (job.cancel) return;
-  await playJourney(job, frames, scales, r, loc);
 }
 
-async function playJourney(job, frames, scales, r, loc) {
+// Compose the keyframes into a WebM video, frame by frame.
+async function encodeJourney(job, frames) {
+  // video size: the screen's device pixels, capped near 1080p for encoder speed
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  let vw = cssW * dpr, vh = cssH * dpr;
+  const cap = Math.min(1, Math.sqrt(2.3e6 / (vw * vh)));
+  vw = Math.round(vw * cap / 2) * 2; vh = Math.round(vh * cap / 2) * 2;
+  const opts = videoConfig(vw, vh);
+  if (!opts) return null;
+  let pick = null;
+  for (const o of opts) { if ((await VideoEncoder.isConfigSupported(o.cfg)).supported) { pick = o; break; } }
+  if (!pick) return null;
+
+  job.phase = 'encode';
+  job.vFrames = Math.ceil((job.T + 0.4) * FPS) + 1; job.vDone = 0; job.vStart = performance.now();
+  const chunks = [];
+  let failed = null;
+  const encoder = new VideoEncoder({
+    output: (chunk) => {
+      const data = new Uint8Array(chunk.byteLength);
+      chunk.copyTo(data);
+      chunks.push({ data, ts: chunk.timestamp, key: chunk.type === 'key' });
+    },
+    error: (e) => { failed = e; },
+  });
+  encoder.configure(pick.cfg);
+  const oc = new OffscreenCanvas(vw, vh), ctx = oc.getContext('2d');
+  ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+  const draw = keyframeDrawer(ctx, vw, vh, frames, job.r);
+  try {
+    for (let i = 0; i < job.vFrames; i++) {
+      if (job.cancel || failed) break;
+      const L = job.pos(Math.min(job.T, i / FPS));
+      await draw.at(L);
+      const vf = new VideoFrame(oc, { timestamp: Math.round(i * 1e6 / FPS), duration: Math.round(1e6 / FPS) });
+      encoder.encode(vf, { keyFrame: i % (FPS * 2) === 0 });
+      vf.close();
+      job.vDone = i + 1;
+      while (encoder.encodeQueueSize > 4 && !failed) await new Promise((res) => setTimeout(res, 2));
+      if (i % 4 === 0) await new Promise((res) => setTimeout(res, 0)); // let the loading screen breathe
+    }
+    if (!job.cancel && !failed) await encoder.flush();
+  } finally {
+    draw.close();
+    if (encoder.state !== 'closed') encoder.close();
+  }
+  if (failed) throw failed;
+  if (job.cancel) return null;
+  const blob = muxWebM(chunks, vw, vh, pick.id, job.vFrames * 1000 / FPS);
+  return { blob, url: URL.createObjectURL(blob), name: job.name };
+}
+
+// Draws the frame at octave position L from the keyframes, decoding them just ahead.
+function keyframeDrawer(ctx, W, H, frames, r) {
+  const K = frames.length - 1, bms = [];
+  const get = (k) => (bms[k] ||= createImageBitmap(frames[k]));
+  return {
+    async at(L) {
+      const k = Math.min(K - 1, Math.floor(L)), f = L - k, z = Math.pow(r, f);
+      for (let j = k; j <= Math.min(K, k + 2); j++) get(j);
+      for (let j = 0; j < k; j++) if (bms[j]) { bms[j].then((b) => b.close()); bms[j] = null; }
+      // keyframe k covers its view; show its central 1/z
+      const bm = await get(k);
+      const sw = bm.width / z, sh = bm.height / z;
+      ctx.globalAlpha = 1;
+      ctx.drawImage(bm, (bm.width - sw) / 2, (bm.height - sh) / 2, sw, sh, 0, 0, W, H);
+      if (f > 0.8) { // fade in the next, sharper keyframe over the centre it covers
+        const nb = await get(k + 1), dw = W * z / r, dh = H * z / r;
+        ctx.globalAlpha = (f - 0.8) / 0.2;
+        ctx.drawImage(nb, (W - dw) / 2, (H - dh) / 2, dw, dh);
+        ctx.globalAlpha = 1;
+      }
+    },
+    close() { bms.forEach((p) => p && p.then((b) => b.close())); },
+  };
+}
+
+async function handOver(job) {
+  S.cx = job.tx; S.cy = job.ty; S.scale = job.scales[job.K];
+  invalidate(false);
+  await waitSettled();
+}
+
+async function playVideo(job, video) {
   job.phase = 'play';
-  const K = frames.length - 1;
+  lastVideo = video; syncUI();
+  movieVideo.src = video.url;
+  movieVideo.currentTime = 0;
+  await new Promise((res) => { movieVideo.onloadeddata = res; movieVideo.onerror = res; });
+  if (job.cancel) return;
+  movieVideo.classList.remove('hidden');
+  toast(`▶ ${job.name.toUpperCase()} · ESC STOPS · ⬇ SAVE VIDEO IN JOURNEYS`);
+  try { await movieVideo.play(); } catch (e) { console.warn(e); }
+  // keep the status bar's zoom readout in step with the video
+  while (!job.cancel && !movieVideo.ended) {
+    await nextFrame();
+    const L = job.pos(Math.min(job.T, movieVideo.currentTime));
+    const k = Math.min(job.K - 1, Math.floor(L));
+    job.liveScale = job.scales[k] / Math.pow(job.r, L - k);
+    if (movieVideo.paused && !movieVideo.ended) break; // e.g. autoplay blocked
+  }
+  if (job.cancel) return;
+  await handOver(job);
+  if (hq === job) { movieVideo.classList.add('hidden'); hq = null; toast('JOURNEY COMPLETE · ⬇ SAVE VIDEO IN JOURNEYS'); }
+}
+
+// Fallback without WebCodecs: draw keyframes live on a 2D canvas.
+async function playKeyframes(job, frames) {
+  job.phase = 'play';
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   movie.width = Math.round(cssW * dpr); movie.height = Math.round(cssH * dpr);
   const ctx = movie.getContext('2d');
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
-  const bms = [];
-  const get = (k) => (bms[k] ||= createImageBitmap(frames[k]));
-  const W = movie.width, H = movie.height;
-  const draw = (bm, z, alpha) => {
-    // bm covers the keyframe's view; show its central 1/z
-    const sw = bm.width / z, sh = bm.height / z;
-    ctx.globalAlpha = alpha;
-    ctx.drawImage(bm, (bm.width - sw) / 2, (bm.height - sh) / 2, sw, sh, 0, 0, W, H);
-  };
-  const drawInner = (bm, frac, alpha) => {
-    // a deeper keyframe covers only the central `frac` of the screen
-    const dw = W * frac, dh = H * frac;
-    ctx.globalAlpha = alpha;
-    ctx.drawImage(bm, (W - dw) / 2, (H - dh) / 2, dw, dh);
-  };
-  // first frame before showing the overlay, so there's no flash
-  draw(await get(0), 1, 1);
+  const draw = keyframeDrawer(ctx, movie.width, movie.height, frames, job.r);
+  await draw.at(0);
   movie.classList.remove('hidden');
-  toast(`▶ ${loc.name.toUpperCase()} IN FULL QUALITY`);
-  // octaves per second from the flight-speed slider; ease in and out over `a` seconds
-  const speed = 0.85 * S.flySpeed, a = Math.min(1.5, K / speed / 3);
-  const T = K / speed + a, vmax = K / (T - a);
-  const pos = (t) => (t < a ? vmax * t * t / (2 * a) : t < T - a ? vmax * (t - a / 2) : K - vmax * (T - t) ** 2 / (2 * a));
   const t0 = performance.now();
   for (;;) {
     await nextFrame();
-    if (job.cancel) { bms.forEach((p) => p.then((b) => b.close())); return; }
-    const t = Math.min(T, (performance.now() - t0) / 1000);
-    const L = Math.max(0, Math.min(K, pos(t)));
-    const k = Math.min(K - 1, Math.floor(L)), f = L - k, z = Math.pow(r, f);
-    for (let j = k; j <= Math.min(K, k + 3); j++) get(j);
-    for (let j = 0; j < k - 1; j++) if (bms[j]) { bms[j].then((b) => b.close()); bms[j] = null; }
-    const bm = await get(k);
-    if (job.cancel) return;
-    draw(bm, z, 1);
-    if (f > 0.8) drawInner(await get(k + 1), z / r, (f - 0.8) / 0.2);
-    ctx.globalAlpha = 1;
-    job.liveScale = scales[k] / z;
-    if (t >= T) break;
+    if (job.cancel) { draw.close(); return; }
+    const x = Math.min(job.T, (performance.now() - t0) / 1000), L = job.pos(x);
+    await draw.at(L);
+    const k = Math.min(job.K - 1, Math.floor(L));
+    job.liveScale = job.scales[k] / Math.pow(job.r, L - k);
+    if (x >= job.T) break;
   }
-  // hand over to the live view at the destination; keep the movie up until it's sharp
-  S.cx = job.tx; S.cy = job.ty; S.scale = scales[K];
-  invalidate(false);
-  await waitSettled();
-  bms.forEach((p) => p && p.then((b) => b.close()));
+  draw.close();
+  await handOver(job);
   if (hq === job) { movie.classList.add('hidden'); hq = null; }
+}
+
+function saveVideo() {
+  if (!lastVideo) return;
+  const a = document.createElement('a');
+  a.href = lastVideo.url;
+  a.download = `fraczilla-${slug(lastVideo.name) || 'journey'}.webm`;
+  a.click();
 }
 
 // ---------------------------------------------------------------- type browser
@@ -1186,6 +1384,11 @@ if (flyLoc) {
   S.f = FORMULAS.find((q) => q.id === flyLoc.f) || FORMULAS[0];
   setHome();
   setTimeout(() => { hideSplash(); goLocation(flyLoc); }, 1800);
+} else if (new URLSearchParams(location.hash.slice(1)).get('dive') === '1' && readHash()) {
+  // shared dive: start at the overview and journey to the linked view
+  const t = { name: 'shared dive', cx: S.cx, cy: S.cy, s: S.scale };
+  setHome();
+  setTimeout(() => { hideSplash(); startJourney(t); }, 1800);
 } else if (!readHash()) setHome();
 buildUI();
 R.uploadPalette(S.palData);

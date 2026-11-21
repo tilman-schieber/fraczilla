@@ -8,6 +8,6 @@ A GPU deep-zoom fractal explorer in the spirit of the classic DOS fractal progra
 - Coloring is a separate pass: 15 palettes plus random ones, color cycling, smooth or banded coloring, 3D lighting, edge ink, and a retro VGA mode.
 - Progressive refinement with 2× anti-aliasing when the view is still, PNG export, and shareable URL links.
 
-Link straight to a journey with `#fly=<name>`, for example https://gh.tschieber.de/fraczilla/#fly=the-abyss. Add `&hq=1` to prerender it in full quality first: the dive is rendered as anti-aliased keyframes one octave apart and then played back smoothly.
+Link straight to a journey with `#fly=<name>`, for example https://gh.tschieber.de/fraczilla/#fly=the-abyss. Add `&hq=1` to prerender it in full quality first: the dive is rendered as anti-aliased keyframes one octave apart, composed into a 60 fps WebM video (WebCodecs) and played back; the video can be saved. The **SHARE DIVE TO HERE** button copies a link that replays a dive from the overview to the current view, with the current colors.
 
 Serve the folder statically (for example `python3 -m http.server`) and open `index.html`. Press `H` in the app for the key list.
