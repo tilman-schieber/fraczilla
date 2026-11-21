@@ -1,10 +1,10 @@
-import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=873389c2';
-import { PALETTES, randomPalette } from './palettes.js?v=873389c2';
-import { LOCATIONS, JULIAS } from './locations.js?v=873389c2';
-import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=873389c2';
-import { FRACTALS, FAMILIES } from './fractals.js?v=873389c2';
-import { muxWebM } from './webm.js?v=873389c2';
-import { asciiLogoSVG } from './logo.js?v=873389c2';
+import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=c7a2b01a';
+import { PALETTES, randomPalette } from './palettes.js?v=c7a2b01a';
+import { LOCATIONS, JULIAS, START } from './locations.js?v=c7a2b01a';
+import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=c7a2b01a';
+import { FRACTALS, FAMILIES } from './fractals.js?v=c7a2b01a';
+import { muxWebM } from './webm.js?v=c7a2b01a';
+import { asciiLogoSVG } from './logo.js?v=c7a2b01a';
 
 const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
@@ -57,7 +57,7 @@ function maxIter() {
 let worker, ref = null, pend = null, reqId = 0;
 function startWorker() {
   if (worker) worker.terminate();
-  worker = new Worker(new URL('./refworker.js?v=873389c2', import.meta.url));
+  worker = new Worker(new URL('./refworker.js?v=c7a2b01a', import.meta.url));
   worker.onmessage = (e) => {
     const m = e.data;
     if (!pend || m.id !== pend.id) return;
@@ -1351,7 +1351,7 @@ function typeKeys(e) {
 }
 
 function thumbOrbit(f, maxIter) {
-  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=873389c2', import.meta.url));
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=c7a2b01a', import.meta.url));
   return new Promise((resolve) => {
     const id = Math.random();
     thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };
@@ -1411,7 +1411,15 @@ if (flyLoc) {
   const t = { name: 'shared dive', cx: S.cx, cy: S.cy, s: S.scale };
   setHome();
   setTimeout(() => { hideSplash(); startJourney(t); }, 1800);
-} else if (!readHash()) setHome();
+} else if (!readHash()) {
+  // a fresh visit: open on one of the showpieces, at random
+  const pick = START[Math.floor(Math.random() * START.length)];
+  const loc = LOCATIONS.find((l) => l.name === pick.loc);
+  S.f = FORMULAS.find((q) => q.id === loc.f) || FORMULAS[0];
+  S.cx = parseFixed(loc.x); S.cy = parseFixed(loc.y); S.scale = loc.s;
+  const pi = PALETTES.findIndex((p) => p.name === (pick.pal || 'Ultra'));
+  if (pi >= 0) { S.pal = pi; S.palData = PALETTES[pi].data; S.smooth = !PALETTES[pi].banded; }
+}
 buildUI();
 R.uploadPalette(S.palData);
 syncUI();
