@@ -24,8 +24,8 @@ canvas#c {
   display: block; touch-action: none; cursor: crosshair;
 }
 canvas#c.grabbing { cursor: grabbing; }
-video#movieVideo { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; object-fit: cover; background: #000; z-index: 4; cursor: pointer; }
-canvas#movie { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; display: block; z-index: 4; cursor: pointer; }
+video#movieVideo { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; object-fit: contain; background: #000; z-index: 4; cursor: pointer; }
+canvas#movie { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 100dvh; object-fit: contain; background: #000; display: block; z-index: 4; cursor: pointer; }
 
 .hud { position: fixed; z-index: 5; }
 .hidden { display: none !important; }
@@ -204,3 +204,9 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 18px; background: var
 
 /* scrollable dialogs would clip the border-straddling title, so put it on the top edge inside */
 .modal-box > .box-title { position: static; transform: none; display: table; margin: -8px auto 10px; padding: 0 10px; background: var(--cyan-dk); color: var(--black); }
+
+/* render panel + the frame of what gets saved */
+.float-box { position: fixed; left: 12px; bottom: 34px; width: 290px; max-width: calc(100vw - 24px); z-index: 6; }
+.float-box select { flex: 1; min-width: 0; }
+#frameBox { position: fixed; z-index: 3; pointer-events: none; border: 2px dashed #ffff55; box-shadow: 0 0 0 100vmax rgba(0, 0, 24, 0.55); }
+#frameLabel { position: absolute; top: 4px; left: 6px; color: #ffff55; background: #000a; padding: 0 4px; font-size: 18px; }

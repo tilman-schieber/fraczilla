@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=508174dc">
+<link rel="stylesheet" href="css/style.css?v=fe22af0b">
 </head>
 <body>
 <canvas id="c"></canvas>
@@ -50,7 +50,7 @@
     <div class="row">
       <button id="autoBtn" class="btn wide" title="A">▶ AUTOPILOT DIVE <kbd>A</kbd></button>
     </div>
-    <div class="row checks"><label title="Render the dive in full quality first, then play it back smoothly"><input id="hq" type="checkbox"> PRERENDER (FULL QUALITY)</label></div>
+    <div class="row"><button id="renderBtn" class="btn wide" title="V: render a full-quality video or image at a chosen size">🎬 RENDER VIDEO / IMAGE <kbd>V</kbd></button></div>
     <div class="row">
       <button id="shareBtn" class="btn wide" title="Copy a link that replays a dive to this view">🔗 SHARE DIVE TO HERE</button>
       <button id="videoBtn" class="btn hidden" title="Download the last prerendered journey">⬇ VIDEO</button>
@@ -127,6 +127,7 @@
       <tr><td>R</td><td>retro mode (VGA palette, banded)</td></tr>
       <tr><td>ARROWS, PGUP/PGDN</td><td>pan, zoom</td></tr>
       <tr><td>S / L</td><td>save PNG / copy link to this view</td></tr>
+      <tr><td>V</td><td>render a video or image at a chosen size</td></tr>
       <tr><td>HOME</td><td>reset view</td></tr>
       <tr><td>TAB / H</td><td>toggle panel / this help</td></tr>
     </table>
@@ -155,14 +156,28 @@
   </div>
 </div>
 
+<div id="frameBox" class="hidden" aria-hidden="true"><span id="frameLabel"></span></div>
+
+<div id="renderDlg" class="box float-box hidden" role="dialog" aria-label="Render video or image">
+  <div class="box-title">RENDER</div>
+  <div class="row"><label>SIZE</label><select id="outSel"></select></div>
+  <div id="outInfo" class="small dim"></div>
+  <div class="row"><label>JOURNEY</label><select id="renderJourney"></select></div>
+  <div class="row"><button id="renderVideo" class="btn wide">🎬 RENDER VIDEO</button></div>
+  <div class="row"><button id="renderImage" class="btn wide">🖼 SAVE IMAGE</button></div>
+  <div class="row"><button id="renderSaveVideo" class="btn wide hidden">⬇ SAVE LAST VIDEO</button></div>
+  <p class="small dim">The dashed frame is what gets saved. Pan and zoom to frame your shot.</p>
+  <div class="center"><button id="renderClose" class="btn">CLOSE <kbd>ESC</kbd></button></div>
+</div>
+
 <div id="hqDlg" class="modal hidden" role="dialog" aria-label="Prerendering journey">
   <div class="box modal-box hq-box">
-    <div class="box-title">PRERENDERING JOURNEY</div>
+    <div id="hqTitle" class="box-title">PRERENDERING JOURNEY</div>
     <div id="hqName" class="hq-name"></div>
-    <div class="hq-row"><span class="hq-lab">KEYFRAMES</span><span id="hqBar1" class="hq-bar"></span><span id="hqTxt1" class="hq-num"></span></div>
-    <div class="hq-row"><span class="hq-lab">VIDEO</span><span id="hqBar2" class="hq-bar"></span><span id="hqTxt2" class="hq-num"></span></div>
+    <div class="hq-row"><span id="hqLab1" class="hq-lab">KEYFRAMES</span><span id="hqBar1" class="hq-bar"></span><span id="hqTxt1" class="hq-num"></span></div>
+    <div id="hqRow2" class="hq-row"><span class="hq-lab">VIDEO</span><span id="hqBar2" class="hq-bar"></span><span id="hqTxt2" class="hq-num"></span></div>
     <div id="hqEta" class="small dim hq-eta"></div>
-    <p class="small dim">Every keyframe is rendered out of sight at full anti-aliased quality, then the whole flight is encoded as a 60 fps video. It starts playing the moment it is ready, and you can save it afterwards.</p>
+    <p id="hqNote" class="small dim">Every keyframe is rendered out of sight at full anti-aliased quality, then the whole flight is encoded as a 60 fps video. It starts playing the moment it is ready, and you can save it afterwards.</p>
     <div class="center"><button class="btn" id="hqCancel">CANCEL <kbd>ESC</kbd></button></div>
   </div>
 </div>
@@ -170,6 +185,6 @@
 <div id="toast"></div>
 <div id="error" class="modal hidden"><div class="box modal-box"><div class="box-title">ERROR</div><p id="errorMsg"></p></div></div>
 
-<script type="module" src="js/main.js?v=508174dc"></script>
+<script type="module" src="js/main.js?v=fe22af0b"></script>
 </body>
 </html>

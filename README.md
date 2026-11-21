@@ -11,6 +11,7 @@ A GPU deep-zoom fractal explorer in the spirit of the classic DOS fractal progra
 - Journeys: smooth zoom-and-pan flights (van Wijk–Nuij) to curated spots, plus an endless autopilot dive.
 - Coloring is a separate pass: 15 palettes plus random ones, color cycling, smooth or banded coloring, 3D lighting, edge ink, and a retro VGA mode.
 - Progressive refinement with 2× anti-aliasing when the view is still, PNG export, and shareable URL links.
+- **RENDER VIDEO / IMAGE** (`V`): pick an output size (window, 720p, 1080p, 1440p, 4K, square, 4:5, 9:16). A dashed frame shows the part of the view that gets saved; render any journey (or a dive to the current view) as a video, or save the view as a PNG at that size.
 
 Link straight to a journey with `#fly=<name>`, for example https://gh.tschieber.de/fraczilla/#fly=the-abyss. Add `&hq=1` to prerender it in full quality first: the dive is rendered as anti-aliased keyframes one octave apart, composed into a 60 fps WebM video (WebCodecs) and played back; the video can be saved. The **SHARE DIVE TO HERE** button copies a link that replays a dive from the overview to the current view, with the current colors.
 

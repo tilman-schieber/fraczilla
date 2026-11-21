@@ -1,10 +1,10 @@
-import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=508174dc';
-import { PALETTES, randomPalette } from './palettes.js?v=508174dc';
-import { LOCATIONS, JULIAS, START } from './locations.js?v=508174dc';
-import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=508174dc';
-import { FRACTALS, FAMILIES } from './fractals.js?v=508174dc';
-import { muxWebM } from './webm.js?v=508174dc';
-import { asciiLogoSVG } from './logo.js?v=508174dc';
+import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=fe22af0b';
+import { PALETTES, randomPalette } from './palettes.js?v=fe22af0b';
+import { LOCATIONS, JULIAS, START } from './locations.js?v=fe22af0b';
+import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=fe22af0b';
+import { FRACTALS, FAMILIES } from './fractals.js?v=fe22af0b';
+import { muxWebM } from './webm.js?v=fe22af0b';
+import { asciiLogoSVG } from './logo.js?v=fe22af0b';
 
 const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
@@ -58,7 +58,7 @@ function maxIter() {
 let worker, ref = null, pend = null, reqId = 0;
 function startWorker() {
   if (worker) worker.terminate();
-  worker = new Worker(new URL('./refworker.js?v=508174dc', import.meta.url));
+  worker = new Worker(new URL('./refworker.js?v=fe22af0b', import.meta.url));
   worker.onmessage = (e) => {
     const m = e.data;
     if (!pend || m.id !== pend.id) return;
@@ -155,13 +155,16 @@ function invalidate(moving) {
   if (moving) lastMove = performance.now();
 }
 
+let outOverride = null; // { w, h } device pixels while rendering an export at a fixed size
 function resize() {
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
   cssW = canvas.clientWidth; cssH = canvas.clientHeight;
-  const W = Math.max(16, Math.round(cssW * dpr)), H = Math.max(16, Math.round(cssH * dpr));
+  const W = outOverride ? outOverride.w : Math.max(16, Math.round(cssW * dpr));
+  const H = outOverride ? outOverride.h : Math.max(16, Math.round(cssH * dpr));
   aaFactor = S.aa && W * H * 4 <= 16e6 ? 2 : 1;
   R.resize(W, H, aaFactor);
   invalidate(false);
+  if (renderOpen()) updateFrame();
 }
 new ResizeObserver(resize).observe(canvas);
 
@@ -267,7 +270,7 @@ function frame(now) {
 // ---------------------------------------------------------------- probe: smarter reference + autopilot steering
 let apTarget = null;
 function analyzeProbe(P) {
-  const pw = Math.min(PROBE_MAXW, Math.max(16, Math.round(PROBE_H * cssW / cssH)));
+  const pw = Math.min(PROBE_MAXW, Math.max(16, Math.round(PROBE_H * R.canvas.width / R.canvas.height)));
   const buf = R.probe(P, pw);
   const n = pw * PROBE_H;
   const pp = 2 * S.scale / PROBE_H;
@@ -743,6 +746,7 @@ window.addEventListener('keydown', (e) => {
   hideSplash();
   if (typesOpen()) { if (e.key === 'Escape') closeTypes(); return; }
   if (hq) { if (e.key === 'Escape') cancelHQ(); e.preventDefault(); return; }
+  if (renderOpen() && e.key === 'Escape') { closeRender(); e.preventDefault(); return; }
   if (e.target.tagName === 'INPUT' && e.target.type !== 'checkbox' && e.target.type !== 'range') return;
   if (e.target.tagName === 'SELECT') return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -769,6 +773,7 @@ window.addEventListener('keydown', (e) => {
     case 'd': case 'D': S.light = !S.light; colorDirty = true; syncUI(); break;
     case 'r': case 'R': toggleRetro(); break;
     case 's': case 'S': save(); break;
+    case 'v': case 'V': renderOpen() ? closeRender() : openRender(); break;
     case 'l': case 'L': copyLink(); break;
     case 'Home': resetView(); break;
     case 'Tab': $('#panel').classList.toggle('closed'); break;
@@ -890,7 +895,18 @@ function buildUI() {
   $('#smooth').onchange = (e) => { S.smooth = e.target.checked; colorDirty = true; };
   $('#light').onchange = (e) => { S.light = e.target.checked; colorDirty = true; };
   $('#aa').onchange = (e) => { S.aa = e.target.checked; resize(); };
-  $('#hq').onchange = (e) => { S.hq = e.target.checked; };
+  $('#renderBtn').onclick = () => (renderOpen() ? closeRender() : openRender());
+  $('#renderClose').onclick = closeRender;
+  $('#outSel').onchange = (e) => { S.out = e.target.value; try { localStorage.setItem('fraczilla.out', S.out); } catch {} updateFrame(); };
+  $('#renderVideo').onclick = () => {
+    const v = +$('#renderJourney').value, loc = currentJourneys()[v];
+    closeRender();
+    if (v < 0 || !loc) prerenderJourney({ name: 'Dive to here', cx: S.cx, cy: S.cy, s: S.scale });
+    else if (loc.inJulia) prerenderJourney({ name: loc.name, cx: loc.cx, cy: loc.cy, s: loc.s });
+    else prerenderJourney({ name: loc.name, cx: parseFixed(loc.x), cy: parseFixed(loc.y), s: loc.s });
+  };
+  $('#renderImage').onclick = renderImage;
+  $('#renderSaveVideo').onclick = saveVideo;
   $('#shareBtn').onclick = shareJourney;
   $('#videoBtn').onclick = saveVideo;
   $('#hqCancel').onclick = cancelHQ;
@@ -992,8 +1008,8 @@ function syncUI() {
   $('#lightStr').value = S.lightStr;
   $('#edge').value = S.edge;
   $('#iterAuto').checked = S.iterAuto;
-  $('#hq').checked = S.hq;
   $('#videoBtn').classList.toggle('hidden', !lastVideo);
+  $('#renderSaveVideo').classList.toggle('hidden', !lastVideo);
   $('#iter').value = Math.log10(maxIter());
   $('#iterLabel').textContent = `MAX ${maxIter()}`;
 }
@@ -1032,19 +1048,31 @@ function cancelHQ() {
     if (job.liveScale) { S.cx = job.tx; S.cy = job.ty; S.scale = job.liveScale; invalidate(false); }
   }
   movie.classList.add('hidden'); movieVideo.classList.add('hidden');
-  toast('JOURNEY STOPPED');
+  toast(job.phase === 'image' ? 'IMAGE CANCELLED' : 'JOURNEY STOPPED');
 }
 
 // ---- loading screen
 const bar = (f, n = 28) => { const k = Math.round(Math.max(0, Math.min(1, f)) * n); return '█'.repeat(k) + '░'.repeat(n - k); };
 const fmtT = (sec) => (sec < 60 ? `${Math.ceil(sec)} s` : `${Math.floor(sec / 60)} min ${Math.round(sec % 60)} s`);
 function showLoading(job) {
-  $('#hqName').textContent = job.name.toUpperCase();
+  const img = job.phase === 'image';
+  $('#hqTitle').textContent = img ? 'RENDERING IMAGE' : 'PRERENDERING JOURNEY';
+  $('#hqLab1').textContent = img ? 'REFINING' : 'KEYFRAMES';
+  $('#hqRow2').classList.toggle('hidden', img);
+  $('#hqNote').classList.toggle('hidden', img);
+  $('#hqName').textContent = `${job.name.toUpperCase()} · ${job.out.w}×${job.out.h}`;
   $('#hqDlg').classList.remove('hidden');
   updateLoading(job);
 }
 function hideLoading() { $('#hqDlg').classList.add('hidden'); }
 function updateLoading(job) {
+  if (job.phase === 'image') {
+    const f = R.full.h ? fullDone / R.full.h : 0;
+    $('#hqBar1').textContent = bar(f);
+    $('#hqTxt1').textContent = `${Math.floor(f * 100)}%`;
+    $('#hqEta').textContent = `ELAPSED ${fmtT((performance.now() - job.t0) / 1000)}`;
+    return;
+  }
   const kf = job.k / (job.K + 1), vf = job.vFrames ? job.vDone / job.vFrames : 0;
   $('#hqBar1').textContent = bar(kf);
   $('#hqTxt1').textContent = `${job.k}/${job.K + 1}`;
@@ -1076,6 +1104,7 @@ function videoConfig(w, h) {
 
 async function prerenderJourney(t) {
   stopMotion();
+  const o = outputSize(), f = cropFactor(o);
   const s0 = Math.max(homeScale(), t.s * 2), s1 = t.s;
   const K = Math.max(1, Math.ceil(Math.log2(s0 / s1)));
   const r = Math.pow(s0 / s1, 1 / K);
@@ -1085,20 +1114,22 @@ async function prerenderJourney(t) {
   const speed = 0.85 * S.flySpeed, a = Math.min(1.5, K / speed / 3);
   const T = K / speed + a, vmax = K / (T - a);
   const pos = (x) => Math.max(0, Math.min(K, x < a ? vmax * x * x / (2 * a) : x < T - a ? vmax * (x - a / 2) : K - vmax * (T - x) ** 2 / (2 * a)));
-  const key = `${refKey()}|${t.cx}|${t.cy}|${t.s}|${S.pal}|${JSON.stringify(C)}|${R.full.w}x${R.full.h}|${S.flySpeed}`;
+  const key = `${refKey()}|${t.cx}|${t.cy}|${t.s}|${S.pal}|${JSON.stringify(C)}|${o.w}x${o.h}|${S.aa}|${S.flySpeed}`;
   const job = hq = {
     phase: 'render', k: 0, K, tx: t.cx, ty: t.cy, name: t.name, cancel: false, scales, r, T, pos,
-    t0: performance.now(), kTimes: [], video: true, vFrames: 0, vDone: 0,
+    t0: performance.now(), kTimes: [], video: true, vFrames: 0, vDone: 0, out: o,
   };
   const cached = S.pal >= 0 && hqCache.get(key);
   if (cached) { await playVideo(job, cached); return; }
 
   showLoading(job);
   const tick = setInterval(() => hq === job && updateLoading(job), 250);
+  const frames = [];
+  let video = null;
+  beginOutput(o, f);
   try {
-    const frames = [];
     for (let k = 0; k <= K; k++) {
-      S.cx = t.cx; S.cy = t.cy; S.scale = scales[k];
+      S.cx = t.cx; S.cy = t.cy; S.scale = scales[k] * f;
       invalidate(false);
       if (!(await waitSettled()) || job.cancel) return;
       const img = R.colorize(R.full, R.full.w, R.full.h, C);
@@ -1107,30 +1138,26 @@ async function prerenderJourney(t) {
       frames.push(await oc.convertToBlob({ type: 'image/webp', quality: 0.92 }));
       job.k = k + 1; job.kTimes.push(performance.now());
     }
-    let video = null;
     try { video = await encodeJourney(job, frames); } catch (e) { console.warn('video encoding failed, playing keyframes live', e); }
-    if (job.cancel) return;
-    hideLoading();
-    if (video) {
-      if (S.pal >= 0) hqCache.set(key, video);
-      await playVideo(job, video);
-    } else {
-      job.video = false;
-      await playKeyframes(job, frames);
-    }
   } finally {
     clearInterval(tick);
+    endOutput(f);
     if (hq === job && job.phase !== 'play') hideLoading();
+  }
+  if (job.cancel) return;
+  hideLoading();
+  if (video) {
+    if (S.pal >= 0) hqCache.set(key, video);
+    await playVideo(job, video);
+  } else {
+    job.video = false;
+    await playKeyframes(job, frames);
   }
 }
 
 // Compose the keyframes into a WebM video, frame by frame.
 async function encodeJourney(job, frames) {
-  // video size: the screen's device pixels, capped near 1080p for encoder speed
-  const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  let vw = cssW * dpr, vh = cssH * dpr;
-  const cap = Math.min(1, Math.sqrt(2.3e6 / (vw * vh)));
-  vw = Math.round(vw * cap / 2) * 2; vh = Math.round(vh * cap / 2) * 2;
+  const vw = job.out.vw, vh = job.out.vh;
   const opts = videoConfig(vw, vh);
   if (!opts) return null;
   let pick = null;
@@ -1234,7 +1261,7 @@ async function playVideo(job, video) {
 async function playKeyframes(job, frames) {
   job.phase = 'play';
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  movie.width = Math.round(cssW * dpr); movie.height = Math.round(cssH * dpr);
+  movie.width = job.out.vw; movie.height = job.out.vh;
   const ctx = movie.getContext('2d');
   ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
   const draw = keyframeDrawer(ctx, movie.width, movie.height, frames, job.r);
@@ -1261,6 +1288,120 @@ function saveVideo() {
   a.href = lastVideo.url;
   a.download = `fraczilla-${slug(lastVideo.name) || 'journey'}.webm`;
   a.click();
+}
+
+// ---------------------------------------------------------------- render panel: output sizes
+const OUTS = [
+  { id: 'window', name: 'WINDOW' },
+  { id: '720p', name: '720p HD', w: 1280, h: 720 },
+  { id: '1080p', name: '1080p FULL HD', w: 1920, h: 1080 },
+  { id: '1440p', name: '1440p QHD', w: 2560, h: 1440 },
+  { id: '4k', name: '4K UHD', w: 3840, h: 2160, note: 'video encoding is slow at 4K' },
+  { id: 'square', name: 'SQUARE 1:1', w: 1080, h: 1080 },
+  { id: 'portrait', name: 'PORTRAIT 4:5', w: 1080, h: 1350 },
+  { id: 'vertical', name: 'VERTICAL 9:16', w: 1080, h: 1920 },
+];
+try { const o = localStorage.getItem('fraczilla.out'); if (OUTS.some((q) => q.id === o)) S.out = o; } catch {}
+S.out ||= 'window';
+const gcd = (a, b) => (b ? gcd(b, a % b) : a);
+
+// w, h: the render size; vw, vh: the video size (the window is capped near 1080p for encoder speed)
+function outputSize(id = S.out) {
+  const q = OUTS.find((x) => x.id === id) || OUTS[0];
+  if (q.w) return { ...q, vw: q.w, vh: q.h };
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const w = Math.round(cssW * dpr / 2) * 2, h = Math.round(cssH * dpr / 2) * 2;
+  const cap = Math.min(1, Math.sqrt(2.3e6 / (w * h)));
+  return { ...q, w, h, vw: Math.round(w * cap / 2) * 2, vh: Math.round(h * cap / 2) * 2 };
+}
+// the largest rectangle of the output's aspect ratio centred in the window (CSS px)
+function cropRect(o) {
+  const ar = o.w / o.h;
+  let w = cssW, h = cssW / ar;
+  if (h > cssH) { h = cssH; w = cssH * ar; }
+  return { x: (cssW - w) / 2, y: (cssH - h) / 2, w, h };
+}
+const cropFactor = (o) => cropRect(o).h / cssH; // output half-height = S.scale × this
+
+function beginOutput(o, f) {
+  outOverride = { w: o.w, h: o.h };
+  S.scale *= f;
+  resize();
+}
+function endOutput(f) {
+  outOverride = null;
+  S.scale /= f;
+  resize();
+}
+
+const renderDlg = $('#renderDlg'), frameBox = $('#frameBox');
+const renderOpen = () => !renderDlg.classList.contains('hidden');
+function openRender() {
+  const sel = $('#outSel');
+  sel.innerHTML = '';
+  for (const q of OUTS) {
+    const o = outputSize(q.id);
+    const opt = document.createElement('option');
+    opt.value = q.id; opt.textContent = `${q.name} · ${o.w}×${o.h}`;
+    sel.appendChild(opt);
+  }
+  sel.value = S.out;
+  const js = $('#renderJourney');
+  js.innerHTML = '<option value="-1">DIVE TO THIS VIEW</option>';
+  currentJourneys().forEach((t, i) => {
+    const opt = document.createElement('option');
+    opt.value = i; opt.textContent = t.name.toUpperCase();
+    js.appendChild(opt);
+  });
+  renderDlg.classList.remove('hidden');
+  updateFrame();
+  syncUI();
+}
+function closeRender() {
+  renderDlg.classList.add('hidden');
+  frameBox.classList.add('hidden');
+}
+function updateFrame() {
+  const o = outputSize(), r = cropRect(o), g = gcd(o.w, o.h);
+  const ar = o.w / g <= 32 ? `${o.w / g}:${o.h / g}` : `${(o.w / o.h).toFixed(2)}:1`;
+  frameBox.style.left = `${r.x}px`; frameBox.style.top = `${r.y}px`;
+  frameBox.style.width = `${r.w}px`; frameBox.style.height = `${r.h}px`;
+  $('#frameLabel').textContent = `${o.w}×${o.h} · ${ar}`;
+  frameBox.classList.remove('hidden');
+  const video = o.vw === o.w ? `${o.vw}×${o.vh}` : `${o.vw}×${o.vh} (window capped for the encoder)`;
+  $('#outInfo').textContent = `IMAGE ${o.w}×${o.h} · VIDEO ${video}${o.note ? ' · ' + o.note : ''}`;
+}
+
+async function renderImage() {
+  stopMotion();
+  const o = outputSize(), f = cropFactor(o);
+  const job = hq = { phase: 'image', name: S.f.name, cancel: false, t0: performance.now(), out: o };
+  showLoading(job);
+  const tick = setInterval(() => hq === job && updateLoading(job), 250);
+  beginOutput(o, f);
+  try {
+    invalidate(false);
+    if (!(await waitSettled()) || job.cancel) return;
+    // the full-quality target is anti-aliased at a multiple of the output size: scale it down
+    const img = R.colorize(R.full, R.full.w, R.full.h, colorParams());
+    const bm = await createImageBitmap(img);
+    const oc = new OffscreenCanvas(o.w, o.h), ctx = oc.getContext('2d');
+    ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.drawImage(bm, 0, 0, o.w, o.h);
+    bm.close();
+    const blob = await oc.convertToBlob({ type: 'image/png' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `fraczilla-${S.f.id}${S.julia ? '-julia' : ''}-${o.w}x${o.h}-${Date.now()}.png`;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(a.href), 5000);
+    toast(`SAVED ${o.w}×${o.h} PNG`);
+  } finally {
+    clearInterval(tick);
+    endOutput(f);
+    hideLoading();
+    if (hq === job) hq = null;
+  }
 }
 
 // ---------------------------------------------------------------- type browser
@@ -1372,7 +1513,7 @@ function typeKeys(e) {
 }
 
 function thumbOrbit(f, maxIter) {
-  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=508174dc', import.meta.url));
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=fe22af0b', import.meta.url));
   return new Promise((resolve) => {
     const id = Math.random();
     thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };
