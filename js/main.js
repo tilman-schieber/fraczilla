@@ -1,9 +1,10 @@
-import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=15a065a1';
-import { PALETTES, randomPalette } from './palettes.js?v=15a065a1';
-import { LOCATIONS, JULIAS } from './locations.js?v=15a065a1';
-import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=15a065a1';
-import { FRACTALS, FAMILIES } from './fractals.js?v=15a065a1';
-import { muxWebM } from './webm.js?v=15a065a1';
+import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=873389c2';
+import { PALETTES, randomPalette } from './palettes.js?v=873389c2';
+import { LOCATIONS, JULIAS } from './locations.js?v=873389c2';
+import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=873389c2';
+import { FRACTALS, FAMILIES } from './fractals.js?v=873389c2';
+import { muxWebM } from './webm.js?v=873389c2';
+import { asciiLogoSVG } from './logo.js?v=873389c2';
 
 const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
@@ -16,6 +17,7 @@ const seqBits = (seq) => [...(seq || 'A')].reduce((acc, ch, i) => acc | ((ch ===
 
 const $ = (s) => document.querySelector(s);
 const canvas = $('#c');
+$('#splashLogo').innerHTML = asciiLogoSVG();
 
 function fatal(msg) {
   $('#errorMsg').textContent = msg;
@@ -55,7 +57,7 @@ function maxIter() {
 let worker, ref = null, pend = null, reqId = 0;
 function startWorker() {
   if (worker) worker.terminate();
-  worker = new Worker(new URL('./refworker.js?v=15a065a1', import.meta.url));
+  worker = new Worker(new URL('./refworker.js?v=873389c2', import.meta.url));
   worker.onmessage = (e) => {
     const m = e.data;
     if (!pend || m.id !== pend.id) return;
@@ -1349,7 +1351,7 @@ function typeKeys(e) {
 }
 
 function thumbOrbit(f, maxIter) {
-  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=15a065a1', import.meta.url));
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=873389c2', import.meta.url));
   return new Promise((resolve) => {
     const id = Math.random();
     thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };
