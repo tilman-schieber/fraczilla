@@ -218,3 +218,12 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 18px; background: var
 .float-box select { flex: 1; min-width: 0; }
 #frameBox { position: fixed; z-index: 3; pointer-events: none; border: 2px dashed #ffff55; box-shadow: 0 0 0 100vmax rgba(0, 0, 24, 0.55); }
 #frameLabel { position: absolute; top: 4px; left: 6px; color: #ffff55; background: #000a; padding: 0 4px; font-size: 18px; }
+
+/* Julia highlights in the journey list */
+.list button .jbadge {
+  display: inline-block; width: 1.1em; margin-right: 6px; text-align: center;
+  background: var(--yellow); color: var(--blue-dk);
+}
+.list button.here { color: var(--yellow); }
+#juliaC.editable { cursor: pointer; color: var(--yellow); }
+#juliaC.editable:hover { text-decoration: underline; }

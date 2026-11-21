@@ -7,6 +7,8 @@
 // chaotic: abs()-style formula with noisy regions (autopilot looks ahead)
 // quick:   shown as a quick pick in the panel
 // julia:   false if the type has no Julia counterpart
+// juliaHome: overview of its Julia sets (default 0, 0, 1.6)
+// start:   journey to open the type on (a Julia highlight), instead of home
 // seq:     Lyapunov forcing sequence (A/B)
 // minScale: zoom floor for float-only types (they top out near 10^5x)
 
@@ -57,7 +59,7 @@ export const FRACTALS = [
   },
   {
     id: 'lambda', name: 'LAMBDA', family: 'mandel', code: 7, degree: 2, ySign: 1,
-    home: ['1', '0', 1.9], deep: true,
+    home: ['1', '0', 1.9], deep: true, juliaHome: ['0.5', '0', 0.8], start: 'Lambda Dragon',
     blurb: 'c·z(1−z), the logistic map in the complex plane. Two Mandelbrots back to back.',
   },
   {
@@ -87,12 +89,12 @@ export const FRACTALS = [
   },
   {
     id: 'magnet1', name: 'MAGNET I', family: 'magnet', code: 102, degree: 2, ySign: 1,
-    home: ['1.6', '0', 2.6], quick: true,
+    home: ['1.6', '0', 2.6], quick: true, juliaHome: ['1', '0', 2.5],
     blurb: '((z² + c − 1) / (2z + c − 2))². Born from the physics of magnets.',
   },
   {
     id: 'magnet2', name: 'MAGNET II', family: 'magnet', code: 103, degree: 2, ySign: 1,
-    home: ['1.2', '0', 2.4],
+    home: ['1.2', '0', 2.4], juliaHome: ['1', '0', 2.5],
     blurb: 'The cubic magnet formula: lumpier, with nested hearts.',
   },
   {
@@ -102,7 +104,7 @@ export const FRACTALS = [
   },
   {
     id: 'phoenix', name: 'PHOENIX', family: 'classic', code: 109, degree: 2, ySign: 1,
-    home: ['-0.35', '0', 1.0],
+    home: ['-0.35', '0', 1.0], start: 'Phoenix Bird',
     blurb: "z² + c − ½·z₋₁. Remembers its last step. Try JULIA at c = 0.5667 for the classic bird.",
   },
   {
@@ -122,17 +124,17 @@ export const FRACTALS = [
   },
   {
     id: 'sine', name: 'SINE', family: 'classic', code: 106, degree: 2, ySign: 1,
-    home: ['0', '0', 3.2],
+    home: ['0', '0', 3.2], juliaHome: ['0', '0', 3.2],
     blurb: 'c·sin(z). Transcendental: an endless row of Mandelbrot-like bugs.',
   },
   {
     id: 'cosine', name: 'COSINE', family: 'classic', code: 112, degree: 2, ySign: 1,
-    home: ['1.5', '0', 2.4],
+    home: ['1.5', '0', 2.4], juliaHome: ['0', '0', 3.2],
     blurb: 'cos(z) + c. A transcendental set that repeats every 2π along the real axis.',
   },
   {
     id: 'exp', name: 'EXPONENTIAL', family: 'classic', code: 113, degree: 2, ySign: 1,
-    home: ['1', '0', 5],
+    home: ['1', '0', 5], juliaHome: ['0', '0', 3],
     blurb: 'c·eᶻ. Cantor bouquets: infinitely many hairs combed out to the right.',
   },
   {

@@ -1,10 +1,10 @@
-import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=9a3ff24c';
-import { PALETTES, randomPalette } from './palettes.js?v=9a3ff24c';
-import { LOCATIONS, JULIAS, START } from './locations.js?v=9a3ff24c';
-import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=9a3ff24c';
-import { FRACTALS, FAMILIES } from './fractals.js?v=9a3ff24c';
-import { muxWebM } from './webm.js?v=9a3ff24c';
-import { asciiLogoSVG } from './logo.js?v=9a3ff24c';
+import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=0e763da7';
+import { PALETTES, randomPalette } from './palettes.js?v=0e763da7';
+import { LOCATIONS, START } from './locations.js?v=0e763da7';
+import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=0e763da7';
+import { FRACTALS, FAMILIES } from './fractals.js?v=0e763da7';
+import { muxWebM } from './webm.js?v=0e763da7';
+import { asciiLogoSVG } from './logo.js?v=0e763da7';
 
 const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
@@ -42,8 +42,12 @@ const S = {
 let retroSaved = null;
 let iterFloor = 0; // learned from the probe: how deep the current view really is
 
+const juliaHome = (f = S.f) => {
+  const h = f.juliaHome || ['0', '0', JULIA_SCALE];
+  return { x: parseFixed(h[0]), y: parseFixed(h[1]), s: h[2] };
+};
 function setHome(f = S.f) {
-  if (S.julia) { S.cx = 0n; S.cy = 0n; S.scale = JULIA_SCALE; return; }
+  if (S.julia) { const h = juliaHome(f); S.cx = h.x; S.cy = h.y; S.scale = h.s; return; }
   S.cx = parseFixed(f.home[0]); S.cy = parseFixed(f.home[1]); S.scale = f.home[2];
 }
 
@@ -58,7 +62,7 @@ function maxIter() {
 let worker, ref = null, pend = null, reqId = 0;
 function startWorker() {
   if (worker) worker.terminate();
-  worker = new Worker(new URL('./refworker.js?v=9a3ff24c', import.meta.url));
+  worker = new Worker(new URL('./refworker.js?v=0e763da7', import.meta.url));
   worker.onmessage = (e) => {
     const m = e.data;
     if (!pend || m.id !== pend.id) return;
@@ -454,6 +458,7 @@ function animate(dt) {
     }
   }
   if (anim.flight) { stepFlight(dt); moved = true; }
+  stepLook(dt);
   if (S.autopilot) { stepAutopilot(dt); moved = true; }
   if (moved) invalidate(true);
 }
@@ -536,8 +541,51 @@ function setFormula(f, keepView = false) {
   stopMotion();
   iterFloor = 0;
   S.f = f; S.julia = false; S.saved = null;
-  if (!keepView) setHome();
+  if (!keepView) {
+    // some types are best known by one Julia set (the Phoenix bird): open on that
+    const start = f.start && LOCATIONS.find((l) => l.name === f.start);
+    if (start) enterJulia(start, true);
+    else setHome();
+    applyLook(start || LOCATIONS.find((l) => l.f === f.id));
+  }
   invalidate(false); syncUI();
+}
+
+// Switch to the Julia set of a curated spot. cut: show its view at once instead of the whole set.
+function enterJulia(loc, cut) {
+  const jx = parseFixed(loc.jx), jy = parseFixed(loc.jy);
+  if (!S.julia) S.saved = S.saved || { cx: S.cx, cy: S.cy, scale: S.scale };
+  if (S.f.id !== loc.f) S.saved = null;
+  S.julia = true; S.jx = jx; S.jy = jy;
+  if (cut) { S.cx = parseFixed(loc.x); S.cy = parseFixed(loc.y); S.scale = loc.s; }
+  else setHome();
+}
+
+// A curated spot can carry its own palette (pal: name), density (d) and offset (o).
+const pal = { from: null, to: null, t: 1, d0: 0, d1: 0 };
+function applyLook(loc) {
+  if (!loc || loc.inJulia || retroSaved) return;
+  const i = PALETTES.findIndex((p) => p.name === (loc.pal || 'Ultra'));
+  if (i < 0) return;
+  const d = loc.d ?? 0;
+  if (i === S.pal && Math.abs(d - S.density) < 0.01) return;
+  pal.from = new Uint8Array(S.palData); pal.to = PALETTES[i].data; pal.t = 0;
+  pal.d0 = S.density; pal.d1 = d;
+  S.pal = i; S.palData = PALETTES[i].data; S.smooth = !PALETTES[i].banded;
+  if (loc.o != null) S.offset = loc.o;
+  colorDirty = true; syncUI();
+}
+// crossfade palette and density over ~0.8 s
+function stepLook(dt) {
+  if (pal.t >= 1) return;
+  pal.t = Math.min(1, pal.t + dt / 0.8);
+  const e = pal.t * pal.t * (3 - 2 * pal.t);
+  const mix = new Uint8Array(1024);
+  for (let i = 0; i < 1024; i++) mix[i] = pal.from[i] + (pal.to[i] - pal.from[i]) * e;
+  R.uploadPalette(pal.t >= 1 ? pal.to : mix);
+  S.density = pal.d0 + (pal.d1 - pal.d0) * e;
+  colorDirty = true;
+  if (pal.t >= 1) syncUI();
 }
 
 function toggleJulia(px, py) {
@@ -566,11 +614,25 @@ function setJulia(jx, jy) {
 
 let locIdx = 0;
 
-function goLocation(loc) {
-  if (loc.inJulia) { startJourney({ name: loc.name, cx: loc.cx, cy: loc.cy, s: loc.s }); return; }
+// Fly to a journey destination (or prerender the flight as a video when render is set).
+function goLocation(loc, render = false) {
+  const go = (t) => (render ? prerenderJourney(t) : startJourney(t));
+  if (loc.inJulia) { go({ name: loc.name, cx: loc.cx, cy: loc.cy, s: loc.s }); return; }
   const f = FORMULAS.find((q) => q.id === loc.f) || FORMULAS[0];
-  if (f !== S.f || S.julia) { setFormula(f); }
-  startJourney({ name: loc.name, cx: parseFixed(loc.x), cy: parseFixed(loc.y), s: loc.s });
+  if (loc.jx != null) {
+    // a Julia highlight: show its whole Julia set, then fly in
+    if (f !== S.f) setFormula(f);
+    if (!S.julia || S.jx !== parseFixed(loc.jx) || S.jy !== parseFixed(loc.jy)) {
+      stopMotion(); iterFloor = 0;
+      enterJulia(loc, false);
+      invalidate(false); syncUI();
+    }
+  } else if (f !== S.f || S.julia) {
+    setFormula(f, true);
+    setHome();
+  }
+  applyLook(loc);
+  go({ name: loc.name, cx: parseFixed(loc.x), cy: parseFixed(loc.y), s: loc.s });
 }
 
 // Fly (or prerender, then play) from wherever we are to target {name, cx, cy, s}.
@@ -580,7 +642,7 @@ function startJourney(t) {
   toast(`FLYING TO ${t.name.toUpperCase()}`);
 }
 
-const homeScale = () => (S.julia ? JULIA_SCALE : S.f.home[2]);
+const homeScale = () => (S.julia ? juliaHome().s : S.f.home[2]);
 
 // A link that replays a dive from the overview to the current view, with the current colors.
 function journeyLink() {
@@ -854,13 +916,11 @@ function buildUI() {
   fwrap.appendChild(more);
   buildTypeBrowser();
 
-  const js = $('#juliaSel');
-  js.onchange = () => {
-    if (js.value === '') return;
-    const j = JULIAS[+js.value];
-    js.value = '';
-    if (S.f.julia === false) { toast(`${S.f.name} HAS NO JULIA MODE`); return; }
-    setJulia(parseFixed(j.x), parseFixed(j.y));
+  $('#juliaC').onclick = () => {
+    if (!S.julia) return;
+    const row = $('#jcRow');
+    row.classList.toggle('hidden');
+    if (!row.classList.contains('hidden')) { syncUI(); $('#jcRe').focus(); $('#jcRe').select(); }
   };
   const NUM = /^\s*[-+−]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*$/;
   const readNum = (el) => {
@@ -874,6 +934,7 @@ function buildUI() {
     if (re == null || im == null) { toast('C MUST BE PLAIN DECIMAL NUMBERS, e.g. 0.5667'); return; }
     if (S.f.julia === false) { toast(`${S.f.name} HAS NO JULIA MODE`); return; }
     document.activeElement.blur();
+    $('#jcRow').classList.add('hidden');
     setJulia(re, im);
     toast(`JULIA SET  c = ${fmtC(S.jx, S.jy, 8)}`);
   };
@@ -881,7 +942,7 @@ function buildUI() {
   for (const id of ['#jcRe', '#jcIm']) {
     $(id).addEventListener('keydown', (e) => {
       if (e.key === 'Enter') { e.preventDefault(); applyC(); }
-      else if (e.key === 'Escape') { e.target.blur(); syncUI(); }
+      else if (e.key === 'Escape') { e.target.blur(); $('#jcRow').classList.add('hidden'); syncUI(); }
     });
   }
   $('#juliaBtn').onclick = () => toggleJulia(null);
@@ -926,8 +987,7 @@ function buildUI() {
     const v = +$('#renderJourney').value, loc = currentJourneys()[v];
     closeRender();
     if (v < 0 || !loc) prerenderJourney({ name: 'Dive to here', cx: S.cx, cy: S.cy, s: S.scale });
-    else if (loc.inJulia) prerenderJourney({ name: loc.name, cx: loc.cx, cy: loc.cy, s: loc.s });
-    else prerenderJourney({ name: loc.name, cx: parseFixed(loc.x), cy: parseFixed(loc.y), s: loc.s });
+    else goLocation(loc, true);
   };
   $('#renderImage').onclick = renderImage;
   $('#renderSaveVideo').onclick = saveVideo;
@@ -977,8 +1037,9 @@ function setDistance(cx, cy, p) {
 
 // Flights inside the current Julia set (these work for any c).
 function juliaJourneys() {
-  const list = [{ name: 'The Whole Julia Set', inJulia: true, cx: 0n, cy: 0n, s: JULIA_SCALE }];
-  if (!S.f.chaotic) {
+  const h = juliaHome();
+  const list = [{ name: 'The Whole Julia Set', inJulia: true, cx: h.x, cy: h.y, s: h.s }];
+  if (S.f.family === 'mandel' && !S.f.chaotic && S.f.code !== 7) {
     // Near z = c, the Julia set mirrors the Mandelbrot set around c (Tan Lei).
     const d = setDistance(toDouble(S.jx), toDouble(S.jy), S.f.degree);
     if (d > 0) list.push({ name: 'Mirror of c', inJulia: true, cx: S.jx, cy: S.jy, s: Math.max(1e-13, Math.min(0.05, d * 20)) });
@@ -987,8 +1048,10 @@ function juliaJourneys() {
 }
 
 function currentJourneys() {
-  if (S.julia) return juliaJourneys();
-  const list = LOCATIONS.filter((l) => l.f === S.f.id);
+  const spots = LOCATIONS.filter((l) => l.f === S.f.id);
+  // in a curated Julia set, its own entry already is "the whole Julia set"
+  const curated = S.julia && spots.some((l) => l.jx != null && parseFixed(l.jx) === S.jx && parseFixed(l.jy) === S.jy);
+  const list = [...(S.julia ? juliaJourneys().slice(curated ? 1 : 0) : []), ...spots];
   if (!list.length) list.push({ name: `The Whole ${S.f.name.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase())}`, f: S.f.id, x: S.f.home[0], y: S.f.home[1], s: S.f.home[2] });
   return list;
 }
@@ -1000,8 +1063,12 @@ function buildLocations() {
   lwrap.innerHTML = '';
   currentJourneys().forEach((loc, i) => {
     const b = document.createElement('button');
-    const mag = (loc.inJulia ? JULIA_SCALE : HOME_SCALE) / loc.s;
-    b.innerHTML = `${loc.name}<span class="tag">${mag < 1e4 ? Math.round(mag) + '×' : '10^' + Math.round(Math.log10(mag))}</span>`;
+    const jul = loc.inJulia || loc.jx != null;
+    const mag = (jul ? juliaHome().s : HOME_SCALE) / loc.s;
+    const here = loc.jx != null && S.julia && S.jx === parseFixed(loc.jx) && S.jy === parseFixed(loc.jy);
+    b.innerHTML = `${loc.jx != null ? '<span class="jbadge" title="A Julia set">J</span>' : ''}${loc.name}<span class="tag">${mag < 1e4 ? Math.round(mag) + '×' : '10^' + Math.round(Math.log10(mag))}</span>`;
+    if (loc.jx != null) b.title = `Julia set, c = ${loc.jx} ${loc.jy.startsWith('-') ? '−' : '+'} ${loc.jy.replace('-', '')}i`;
+    if (here) b.classList.add('here');
     if (loc.name === 'Mirror of c') b.title = 'Near z = c, a Julia set echoes the Mandelbrot set around c';
     b.onclick = () => { locIdx = i; goLocation(loc); };
     lwrap.appendChild(b);
@@ -1015,13 +1082,11 @@ function syncUI() {
   $('#typeNow').textContent = S.f.quick ? '' : `NOW: ${S.f.name} · ${fam ? fam.name.toLowerCase() : ''}`;
   document.querySelectorAll('#palettes .pal').forEach((b, i) => b.classList.toggle('on', i === S.pal));
   $('#juliaBtn').classList.toggle('on', S.julia);
-  $('#juliaRow').classList.remove('hidden');
-  $('#juliaC').textContent = S.julia ? '' : 'SPACE over any point opens its Julia set, or type c and press ENTER';
-  const jsel = $('#juliaSel');
-  if (jsel.dataset.f !== S.f.id) {
-    jsel.dataset.f = S.f.id;
-    jsel.innerHTML = '<option value="">— PRESETS —</option>' + JULIAS.map((j, i) => (!j.f || j.f === S.f.id) ? `<option value="${i}">${j.name.toUpperCase()}</option>` : '').join('');
-  }
+  const jc = $('#juliaC');
+  jc.textContent = S.julia ? `c = ${fmtC(S.jx, S.jy, 8)}  ✎` : (S.f.julia === false ? '' : 'SPACE over any point opens its Julia set');
+  jc.classList.toggle('editable', S.julia);
+  jc.title = S.julia ? 'Click to type a different c' : '';
+  if (!S.julia) $('#jcRow').classList.add('hidden');
   const re = $('#jcRe'), im = $('#jcIm');
   if (document.activeElement !== re && document.activeElement !== im) {
     const c = S.julia ? [S.jx, S.jy] : null;
@@ -1549,7 +1614,7 @@ function typeKeys(e) {
 }
 
 function thumbOrbit(f, maxIter) {
-  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=9a3ff24c', import.meta.url));
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=0e763da7', import.meta.url));
   return new Promise((resolve) => {
     const id = Math.random();
     thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };
@@ -1559,6 +1624,41 @@ function thumbOrbit(f, maxIter) {
       maxIter, bail2: BAIL * BAIL,
     });
   });
+}
+
+// Small offscreen pictures of any view (type f; a Julia set when view.jx is set), with
+// their own reference-orbit worker so the main view's reference stays untouched.
+let picWorker = null;
+const picWait = new Map();
+function picOrbit(f, julia, cx, cy, jx, jy, F, maxIter) {
+  if (!picWorker) {
+    picWorker = new Worker(new URL('./refworker.js?v=0e763da7', import.meta.url));
+    picWorker.onmessage = (e) => { const r = picWait.get(e.data.id); if (r) { picWait.delete(e.data.id); r(e.data); } };
+  }
+  return new Promise((resolve) => {
+    const id = Math.random();
+    picWait.set(id, resolve);
+    picWorker.postMessage({ id, formula: f.code, julia, F, rx: cx.toString(), ry: cy.toString(), jx: jx.toString(), jy: jy.toString(), maxIter, bail2: BAIL * BAIL });
+  });
+}
+async function picture(f, v, w, h, C = colorParams()) {
+  const julia = v.jx != null;
+  const cx = typeof v.x === 'bigint' ? v.x : parseFixed(v.x), cy = typeof v.y === 'bigint' ? v.y : parseFixed(v.y);
+  const jx = julia ? (typeof v.jx === 'bigint' ? v.jx : parseFixed(v.jx)) : 0n;
+  const jy = julia ? (typeof v.jy === 'bigint' ? v.jy : parseFixed(v.jy)) : 0n;
+  const L = Math.max(0, Math.log10(HOME_SCALE / v.s));
+  const maxIter = v.maxIter || Math.round(Math.min(20000, 300 + 90 * L + 9 * L * L));
+  const F = Math.min(FB, Math.max(64, Math.ceil(-Math.log2(v.s)) + 56) + 24);
+  const m = f.deep ? await picOrbit(f, julia, cx, cy, jx, jy, F, maxIter + 100) : { lenA: 0, offB: 0, lenB: 0 };
+  if (f.deep) R.uploadOrbit(m.data, m.count, R.thumbOrbitTex);
+  return R.thumbnail({
+    formula: f.code, julia, refOffX: 0, refOffY: 0, scale: v.s, ySign: f.ySign,
+    maxIter, lenA: m.lenA, offB: m.offB, lenB: m.lenB, bail: f.deep ? BAIL : (f.code === 102 || f.code === 103 ? 100 : 256),
+    degree: f.degree, orbitTex: R.thumbOrbitTex,
+    cX: julia ? toDouble(jx) : toDouble(cx), cY: julia ? toDouble(jy) : toDouble(cy), crit: f.code === 7 ? 0.5 : 0,
+    centerX: toDouble(cx), centerY: toDouble(cy), jcX: toDouble(jx), jcY: toDouble(jy),
+    seq: seqBits(f.seq), seqLen: (f.seq || 'A').length,
+  }, C, w, h);
 }
 
 // Render each type's overview with the current palette, one per animation frame.
@@ -1612,11 +1712,13 @@ if (flyLoc) {
 } else if (!readHash()) {
   // a fresh visit: open on one of the showpieces, at random
   const pick = START[Math.floor(Math.random() * START.length)];
-  const loc = LOCATIONS.find((l) => l.name === pick.loc);
+  const loc = LOCATIONS.find((l) => l.name === pick);
   S.f = FORMULAS.find((q) => q.id === loc.f) || FORMULAS[0];
+  if (loc.jx != null) enterJulia(loc, true);
   S.cx = parseFixed(loc.x); S.cy = parseFixed(loc.y); S.scale = loc.s;
-  const pi = PALETTES.findIndex((p) => p.name === (pick.pal || 'Ultra'));
+  const pi = PALETTES.findIndex((p) => p.name === (loc.pal || 'Ultra'));
   if (pi >= 0) { S.pal = pi; S.palData = PALETTES[pi].data; S.smooth = !PALETTES[pi].banded; }
+  S.density = loc.d ?? 0;
 }
 buildUI();
 R.uploadPalette(S.palData);
@@ -1625,4 +1727,4 @@ resize();
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.fraczilla = { S, R, get params() { return fractalParams(); }, get ref() { return ref; }, get state() { return { viewVer, lowVer, fullVer, fullDone, fullH: R.full.h, probedVer, pend: !!pend, refOk: !!ref && ref.key === refKey() }; }, flyTo: (x, y, s) => flyTo(parseFixed(x), parseFixed(y), s) };
+window.fraczilla = { S, R, get params() { return fractalParams(); }, get ref() { return ref; }, get state() { return { viewVer, lowVer, fullVer, fullDone, fullH: R.full.h, probedVer, pend: !!pend, refOk: !!ref && ref.key === refKey() }; }, flyTo: (x, y, s) => flyTo(parseFixed(x), parseFixed(y), s), picture: (id, v, w, h, C) => picture(FORMULAS.find((q) => q.id === id), v, w, h, C), PALETTES, LOCATIONS, colorParams, go: (n) => goLocation(LOCATIONS.find((l) => l.name === n)) };

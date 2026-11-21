@@ -223,7 +223,8 @@ void main() {
   }
 #elif FORMULA == 109
   // Phoenix: z' = z^2 + c + p·z_prev with p = -0.5 (Julia mode: the classic Phoenix at c = 0.5667)
-  vec2 c = julia ? uJC : pt, z = julia ? pt : vec2(0.0), zp = vec2(0.0);
+  // (Julia mode swaps x and y, as the classic DOS program did, so the bird sits upright)
+  vec2 c = julia ? uJC : pt, z = julia ? pt.yx : vec2(0.0), zp = vec2(0.0);
   for (int i = 0; i < uMaxIter; i++) {
     vec2 nz = cmul(z, z) + c - 0.5*zp;
     zp = z; z = nz;
@@ -439,6 +440,8 @@ void main() {
   vec4 z = pt;
 #elif FORMULA == 105
   vec4 z = pt;
+#elif FORMULA == 109
+  vec4 z = julia ? pt.zwxy : vec4(0.0), zp = vec4(0.0);
 #else
   vec4 z = julia ? pt : vec4(0.0), zp = z;
 #endif
