@@ -58,7 +58,7 @@ export const LOCATIONS = [
   { name: 'The Whole Sine', f: 'sine', x: '0', y: '0', s: 3.2 },
   { name: 'Sine Coast', f: 'sine', x: '0.43122115', y: '-0.90694439', s: 0.00536 },
   { name: 'The Whole Lyapunov', f: 'lyapunov', x: '3', y: '3', s: 1.05 },
-  { name: 'Crossroads', f: 'lyapunov', x: '3.6', y: '3.6', s: 0.25 },
+  { name: 'Swallowtail', f: 'lyapunov', x: '2.86092018', y: '3.76268612', s: 0.0849227 },
   { name: 'Zircon Zity', f: 'zircon', x: '3.7', y: '2.95', s: 0.42 },
   { name: 'Zircon Towers', f: 'zircon', x: '3.85', y: '3.1', s: 0.12 },
   { name: 'The Whole Plasma', f: 'plasma', x: '0', y: '0', s: 1.5 },
