@@ -93,6 +93,7 @@ export const START = [
   { loc: 'Sine Coast' },
 ];
 
+// Julia presets. Ones with `f` are listed only for that fractal type.
 export const JULIAS = [
   { name: 'Douady Rabbit', x: '-0.123', y: '0.745' },
   { name: 'Dragon', x: '-0.8', y: '0.156' },
@@ -101,4 +102,5 @@ export const JULIAS = [
   { name: 'Dendrite', x: '0', y: '1' },
   { name: 'Galaxies', x: '-0.7269', y: '0.1889' },
   { name: 'Spiral Storm', x: '0.285', y: '0.01' },
+  { name: 'Phoenix Bird', x: '0.5667', y: '0', f: 'phoenix' },
 ];

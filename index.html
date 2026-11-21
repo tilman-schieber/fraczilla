@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=fe22af0b">
+<link rel="stylesheet" href="css/style.css?v=9a3ff24c">
 </head>
 <body>
 <canvas id="c"></canvas>
@@ -40,6 +40,11 @@
     <div id="juliaRow" class="row hidden">
       <label>JULIA C</label>
       <select id="juliaSel"></select>
+    </div>
+    <div class="row jc-row" title="Type a Julia constant c and press ENTER">
+      <label for="jcRe">C =</label><input id="jcRe" class="num" type="text" inputmode="decimal" spellcheck="false" autocomplete="off" aria-label="Real part of c">
+      <span>+</span><input id="jcIm" class="num" type="text" inputmode="decimal" spellcheck="false" autocomplete="off" aria-label="Imaginary part of c"><span>i</span>
+      <button id="jcSet" class="btn">SET</button>
     </div>
     <div id="juliaC" class="small dim"></div>
   </div>
@@ -185,6 +190,6 @@
 <div id="toast"></div>
 <div id="error" class="modal hidden"><div class="box modal-box"><div class="box-title">ERROR</div><p id="errorMsg"></p></div></div>
 
-<script type="module" src="js/main.js?v=fe22af0b"></script>
+<script type="module" src="js/main.js?v=9a3ff24c"></script>
 </body>
 </html>

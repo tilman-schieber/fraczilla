@@ -7,7 +7,7 @@ A GPU deep-zoom fractal explorer in the spirit of the classic DOS fractal progra
   - deep zoom (perturbation, to ~10³⁰×): Mandelbrot, Tricorn, Multibrot 3/4/5, Lambda, Burning Ship, Celtic, Buffalo, Perpendicular Burning Ship, Perpendicular Mandelbrot
   - double-float (to ~10¹⁰×): Newton, Halley, Nova, Magnet I/II, Phoenix, Manowar, Spider, Barnsley M1, Sine, Cosine, Exponential
   - beyond escape time: Lyapunov (AB and Zircon Zity) and Plasma
-  - most have a Julia counterpart (press SPACE over any point)
+  - most have a Julia counterpart: press SPACE over any point, pick a preset, or type the constant c
 - Journeys: smooth zoom-and-pan flights (van Wijk–Nuij) to curated spots, plus an endless autopilot dive.
 - Coloring is a separate pass: 15 palettes plus random ones, color cycling, smooth or banded coloring, 3D lighting, edge ink, and a retro VGA mode.
 - Progressive refinement with 2× anti-aliasing when the view is still, PNG export, and shareable URL links.

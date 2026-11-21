@@ -1,10 +1,10 @@
-import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=fe22af0b';
-import { PALETTES, randomPalette } from './palettes.js?v=fe22af0b';
-import { LOCATIONS, JULIAS, START } from './locations.js?v=fe22af0b';
-import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=fe22af0b';
-import { FRACTALS, FAMILIES } from './fractals.js?v=fe22af0b';
-import { muxWebM } from './webm.js?v=fe22af0b';
-import { asciiLogoSVG } from './logo.js?v=fe22af0b';
+import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=9a3ff24c';
+import { PALETTES, randomPalette } from './palettes.js?v=9a3ff24c';
+import { LOCATIONS, JULIAS, START } from './locations.js?v=9a3ff24c';
+import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=9a3ff24c';
+import { FRACTALS, FAMILIES } from './fractals.js?v=9a3ff24c';
+import { muxWebM } from './webm.js?v=9a3ff24c';
+import { asciiLogoSVG } from './logo.js?v=9a3ff24c';
 
 const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
@@ -58,7 +58,7 @@ function maxIter() {
 let worker, ref = null, pend = null, reqId = 0;
 function startWorker() {
   if (worker) worker.terminate();
-  worker = new Worker(new URL('./refworker.js?v=fe22af0b', import.meta.url));
+  worker = new Worker(new URL('./refworker.js?v=9a3ff24c', import.meta.url));
   worker.onmessage = (e) => {
     const m = e.data;
     if (!pend || m.id !== pend.id) return;
@@ -814,6 +814,8 @@ function hideSplash() {
 }
 setTimeout(hideSplash, 3500);
 
+const trimNum = (t) => t.includes('.') ? t.replace(/0+$/, '').replace(/\.$/, '') : t;
+
 function fmtC(x, y, d) {
   const ys = formatFixed(y < 0n ? -y : y, d);
   return `${formatFixed(x, d)} ${y < 0n ? '−' : '+'} ${ys}i`;
@@ -853,13 +855,35 @@ function buildUI() {
   buildTypeBrowser();
 
   const js = $('#juliaSel');
-  js.innerHTML = '<option value="">— PRESETS —</option>' + JULIAS.map((j, i) => `<option value="${i}">${j.name.toUpperCase()}</option>`).join('');
   js.onchange = () => {
     if (js.value === '') return;
     const j = JULIAS[+js.value];
-    setJulia(parseFixed(j.x), parseFixed(j.y));
     js.value = '';
+    if (S.f.julia === false) { toast(`${S.f.name} HAS NO JULIA MODE`); return; }
+    setJulia(parseFixed(j.x), parseFixed(j.y));
   };
+  const NUM = /^\s*[-+−]?(\d+\.?\d*|\.\d+)([eE][-+]?\d+)?\s*$/;
+  const readNum = (el) => {
+    const v = el.value.replace('−', '-').trim() || '0';
+    const ok = NUM.test(v) && !/e/i.test(v);
+    el.classList.toggle('bad', !ok);
+    return ok ? parseFixed(v) : null;
+  };
+  const applyC = () => {
+    const re = readNum($('#jcRe')), im = readNum($('#jcIm'));
+    if (re == null || im == null) { toast('C MUST BE PLAIN DECIMAL NUMBERS, e.g. 0.5667'); return; }
+    if (S.f.julia === false) { toast(`${S.f.name} HAS NO JULIA MODE`); return; }
+    document.activeElement.blur();
+    setJulia(re, im);
+    toast(`JULIA SET  c = ${fmtC(S.jx, S.jy, 8)}`);
+  };
+  $('#jcSet').onclick = applyC;
+  for (const id of ['#jcRe', '#jcIm']) {
+    $(id).addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); applyC(); }
+      else if (e.key === 'Escape') { e.target.blur(); syncUI(); }
+    });
+  }
   $('#juliaBtn').onclick = () => toggleJulia(null);
 
   const pwrap = $('#palettes');
@@ -992,7 +1016,19 @@ function syncUI() {
   document.querySelectorAll('#palettes .pal').forEach((b, i) => b.classList.toggle('on', i === S.pal));
   $('#juliaBtn').classList.toggle('on', S.julia);
   $('#juliaRow').classList.remove('hidden');
-  $('#juliaC').textContent = S.julia ? `c = ${fmtC(S.jx, S.jy, 10)}` : 'SPACE over any point opens its Julia set';
+  $('#juliaC').textContent = S.julia ? '' : 'SPACE over any point opens its Julia set, or type c and press ENTER';
+  const jsel = $('#juliaSel');
+  if (jsel.dataset.f !== S.f.id) {
+    jsel.dataset.f = S.f.id;
+    jsel.innerHTML = '<option value="">— PRESETS —</option>' + JULIAS.map((j, i) => (!j.f || j.f === S.f.id) ? `<option value="${i}">${j.name.toUpperCase()}</option>` : '').join('');
+  }
+  const re = $('#jcRe'), im = $('#jcIm');
+  if (document.activeElement !== re && document.activeElement !== im) {
+    const c = S.julia ? [S.jx, S.jy] : null;
+    re.value = c ? trimNum(formatFixed(c[0], 10)) : ''; im.value = c ? trimNum(formatFixed(c[1], 10)) : '';
+    re.placeholder = '0.5667'; im.placeholder = '0';
+    re.classList.remove('bad'); im.classList.remove('bad');
+  }
   $('#cycleBtn').classList.toggle('on', S.cycling);
   $('#retroBtn').classList.toggle('on', !!retroSaved);
   $('#autoBtn').classList.toggle('on', S.autopilot);
@@ -1513,7 +1549,7 @@ function typeKeys(e) {
 }
 
 function thumbOrbit(f, maxIter) {
-  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=fe22af0b', import.meta.url));
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=9a3ff24c', import.meta.url));
   return new Promise((resolve) => {
     const id = Math.random();
     thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };

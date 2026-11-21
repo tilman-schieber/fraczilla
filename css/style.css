@@ -75,6 +75,14 @@ canvas#movie { position: fixed; inset: 0; width: 100vw; height: 100vh; height: 1
 .row > label:first-child { width: 112px; color: var(--cyan); flex: none; }
 .row.checks label { width: auto; color: var(--white); display: flex; align-items: center; gap: 6px; cursor: pointer; }
 .row input[type=range] { flex: 1; min-width: 100px; }
+.row.jc-row { flex-wrap: nowrap; gap: 4px; }
+.row.jc-row > label:first-child { width: auto; }
+input.num {
+  flex: 1; min-width: 0; width: 0; font: inherit; font-size: 19px; background: var(--black); color: var(--yellow);
+  border: 2px solid var(--cyan-dk); padding: 0 4px; outline: none;
+}
+input.num:focus { border-color: var(--yellow); }
+input.num.bad { border-color: #ff5555; }
 
 .btn {
   font: inherit; font-size: 19px; color: var(--black); background: var(--gray);
