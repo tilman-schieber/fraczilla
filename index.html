@@ -31,6 +31,7 @@
   <div class="box">
     <div class="box-title">FRACTAL TYPE</div>
     <div id="formulas" class="btn-grid"></div>
+    <div id="typeNow" class="small dim"></div>
     <div class="row">
       <button id="juliaBtn" class="btn wide" title="Space">MANDEL ⇄ JULIA <kbd>SPACE</kbd></button>
     </div>
@@ -113,7 +114,7 @@
       <tr><td>P / SHIFT+P</td><td>next palette / random palette</td></tr>
       <tr><td>[ / ]</td><td>color density</td></tr>
       <tr><td>, / .</td><td>fewer / more iterations</td></tr>
-      <tr><td>F</td><td>next fractal type</td></tr>
+      <tr><td>F</td><td>browse all fractal types</td></tr>
       <tr><td>B</td><td>smooth ⇄ banded colors</td></tr>
       <tr><td>D</td><td>3D lighting on/off</td></tr>
       <tr><td>R</td><td>retro mode (VGA palette, banded)</td></tr>
@@ -137,6 +138,20 @@
  ╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝╚══════╝╚═╝╚══════╝╚══════╝╚═╝  ╚═╝</pre>
   <div class="splash-sub">GPU DEEP-ZOOM FRACTAL MONSTER · 10<sup>30</sup>× · 100% IN YOUR BROWSER</div>
   <div class="splash-hint">press any key · scroll to zoom · H for help</div>
+</div>
+
+<div id="typeDlg" class="modal hidden" role="dialog" aria-label="Select a fractal type">
+  <div class="box type-box">
+    <div class="box-title">SELECT A FRACTAL TYPE</div>
+    <div class="type-head">
+      <label for="typeSearch">⌕ SEARCH</label>
+      <input id="typeSearch" type="text" autocomplete="off" spellcheck="false" placeholder="name, family, formula…">
+      <button id="typeClose" class="btn">ESC</button>
+    </div>
+    <div id="typeList"></div>
+    <p id="typeEmpty" class="dim hidden">No fractal type matches that search.</p>
+    <div class="small dim type-foot">↑↓←→ move · ENTER picks · ESC closes · <span class="badge">DEEP ZOOM ✓</span> zooms to 10<sup>30</sup>×</div>
+  </div>
 </div>
 
 <div id="toast"></div>

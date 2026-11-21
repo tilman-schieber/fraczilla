@@ -2,15 +2,9 @@ import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js
 import { PALETTES, randomPalette } from './palettes.js';
 import { LOCATIONS, JULIAS } from './locations.js';
 import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js';
+import { FRACTALS, FAMILIES } from './fractals.js';
 
-const FORMULAS = [
-  { id: 'mandelbrot', name: 'MANDELBROT', code: 0, degree: 2, ySign: 1, home: ['-0.6', '0', 1.25] },
-  { id: 'burningship', name: 'BURNING SHIP', code: 1, degree: 2, ySign: -1, home: ['-0.4', '-0.55', 1.15] },
-  { id: 'tricorn', name: 'TRICORN', code: 2, degree: 2, ySign: 1, home: ['-0.3', '0', 1.45] },
-  { id: 'celtic', name: 'CELTIC', code: 3, degree: 2, ySign: 1, home: ['-0.4', '0', 1.3] },
-  { id: 'multibrot3', name: 'MULTIBROT³', code: 4, degree: 3, ySign: 1, home: ['0', '0', 1.3] },
-  { id: 'multibrot4', name: 'MULTIBROT⁴', code: 5, degree: 4, ySign: 1, home: ['-0.15', '0', 1.25] },
-];
+const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
 const MIN_SCALE = 1e-31, MAX_SCALE = 8, BAIL = 1000, HOME_SCALE = 1.25;
 
@@ -144,6 +138,14 @@ function resize() {
 }
 new ResizeObserver(resize).observe(canvas);
 
+function colorParams() {
+  return {
+    density: Math.pow(2, S.density), offset: S.offset, mapping: S.mapping, smooth: S.smooth,
+    light: S.light, lightAngle: S.lightAngle, lightStr: S.lightStr, edge: S.edge,
+    inside: S.inside, insideColor: [0, 0, 0],
+  };
+}
+
 function fractalParams() {
   return {
     formula: S.f.code, julia: S.julia,
@@ -202,11 +204,9 @@ function frame(now) {
   if (saveReq && fullComplete) colorDirty = true;
   if (colorDirty && haveLow) {
     R.composite({
+      ...colorParams(),
       lowW, lowH, haveFull: fullVer === lowVer && fullDone > 0,
       doneY: Math.ceil((R.full.h - fullDone) / aaFactor),
-      density: Math.pow(2, S.density), offset: S.offset, mapping: S.mapping, smooth: S.smooth,
-      light: S.light, lightAngle: S.lightAngle, lightStr: S.lightStr, edge: S.edge,
-      inside: S.inside, insideColor: [0, 0, 0],
     });
     colorDirty = false;
     if (saveReq && fullComplete) { saveReq = false; doSave(); }
@@ -257,7 +257,7 @@ function analyzeProbe(P) {
   }
   if (S.autopilot) {
     if (maxIdx < 0) { if (S.iterAuto && maxIter() < 100000) return; stopAutopilot('Autopilot: swallowed by the set. Zoom out and try again!'); return; }
-    if (S.f.code === 1 || S.f.code === 2 || S.f.code === 3) { autopilotChoose(P, buf, pw, maxEsc, pt); return; }
+    if (S.f.chaotic) { autopilotChoose(P, buf, pw, maxEsc, pt); return; }
     // smooth (holomorphic) formulas: deepest escaping pixels near the centre, stay close to the previous target
     const thr = maxEsc - Math.max(2, maxEsc * 0.06);
     const [tx0, ty0] = apTarget ? [toDouble(apTarget.x - S.cx), toDouble(apTarget.y - S.cy)] : [0, 0];
@@ -672,6 +672,7 @@ canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
 window.addEventListener('keydown', (e) => {
   hideSplash();
+  if (typesOpen()) { if (e.key === 'Escape') closeTypes(); return; }
   if (e.target.tagName === 'INPUT' && e.target.type !== 'checkbox' && e.target.type !== 'range') return;
   if (e.target.tagName === 'SELECT') return;
   if (e.ctrlKey || e.metaKey || e.altKey) return;
@@ -693,7 +694,7 @@ window.addEventListener('keydown', (e) => {
     case ']': S.density = Math.min(4, S.density + 0.15); colorDirty = true; syncUI(); break;
     case ',': case '<': S.iterAuto = false; S.iterManual = Math.max(50, Math.round(maxIter() / 1.4)); invalidate(false); syncUI(); toast(`MAX ITER ${S.iterManual}`); break;
     case '.': case '>': S.iterAuto = false; S.iterManual = Math.min(200000, Math.round(maxIter() * 1.4)); invalidate(false); syncUI(); toast(`MAX ITER ${S.iterManual}`); break;
-    case 'f': case 'F': setFormula(FORMULAS[(FORMULAS.indexOf(S.f) + 1) % FORMULAS.length]); toast(S.f.name); break;
+    case 'f': case 'F': openTypes(); break;
     case 'b': case 'B': S.smooth = !S.smooth; colorDirty = true; syncUI(); break;
     case 'd': case 'D': S.light = !S.light; colorDirty = true; syncUI(); break;
     case 'r': case 'R': toggleRetro(); break;
@@ -763,12 +764,17 @@ function updateStatus(refOk) {
 
 function buildUI() {
   const fwrap = $('#formulas');
-  FORMULAS.forEach((f) => {
+  FORMULAS.filter((f) => f.quick).forEach((f) => {
     const b = document.createElement('button');
     b.className = 'btn'; b.textContent = f.name; b.dataset.id = f.id;
-    b.onclick = () => setFormula(f);
+    b.onclick = () => { setFormula(f); toast(f.name); };
     fwrap.appendChild(b);
   });
+  const more = document.createElement('button');
+  more.className = 'btn more'; more.innerHTML = 'MORE… <kbd>F</kbd>'; more.title = 'Browse all fractal types (F)';
+  more.onclick = openTypes;
+  fwrap.appendChild(more);
+  buildTypeBrowser();
 
   const js = $('#juliaSel');
   js.innerHTML = '<option value="">— PRESETS —</option>' + JULIAS.map((j, i) => `<option value="${i}">${j.name.toUpperCase()}</option>`).join('');
@@ -860,7 +866,9 @@ function buildLocations() {
 
 function syncUI() {
   buildLocations();
-  document.querySelectorAll('#formulas .btn').forEach((b) => b.classList.toggle('on', b.dataset.id === S.f.id));
+  document.querySelectorAll('#formulas .btn').forEach((b) => b.classList.toggle('on', b.dataset.id === S.f.id || (b.classList.contains('more') && !S.f.quick)));
+  const fam = FAMILIES.find((q) => q.id === S.f.family);
+  $('#typeNow').textContent = S.f.quick ? '' : `NOW: ${S.f.name} · ${fam ? fam.name.toLowerCase() : ''}`;
   document.querySelectorAll('#palettes .pal').forEach((b, i) => b.classList.toggle('on', i === S.pal));
   $('#juliaBtn').classList.toggle('on', S.julia);
   $('#juliaRow').classList.remove('hidden');
@@ -885,6 +893,157 @@ function syncUI() {
 }
 
 canvas.addEventListener('webglcontextlost', (e) => { e.preventDefault(); fatal('The GPU context was lost (driver reset). Reload the page to continue.'); });
+
+// ---------------------------------------------------------------- type browser
+const THUMB_W = 240, THUMB_H = 150;
+const typeDlg = $('#typeDlg'), typeSearch = $('#typeSearch');
+let thumbWorker = null, thumbBusy = false, thumbKey = '', thumbPalData = null;
+const thumbCache = new Map();
+
+function buildTypeBrowser() {
+  const list = $('#typeList');
+  list.innerHTML = '';
+  for (const fam of FAMILIES) {
+    const types = FORMULAS.filter((f) => f.family === fam.id);
+    if (!types.length) continue;
+    const sec = document.createElement('section');
+    sec.className = 'type-fam';
+    sec.innerHTML = `<h3>── ${fam.name} ──</h3><div class="type-grid"></div>`;
+    const grid = sec.querySelector('.type-grid');
+    for (const f of types) {
+      const b = document.createElement('button');
+      b.className = 'type-card'; b.dataset.id = f.id;
+      b.dataset.search = `${f.name} ${f.id} ${fam.name} ${f.blurb}`.toLowerCase();
+      const c = document.createElement('canvas');
+      c.width = THUMB_W; c.height = THUMB_H;
+      const name = document.createElement('div');
+      name.className = 'type-name';
+      name.innerHTML = `${f.name}${f.deep ? '<span class="badge" title="Zooms to 10³⁰×">DEEP ZOOM ✓</span>' : ''}`;
+      const blurb = document.createElement('div');
+      blurb.className = 'type-blurb'; blurb.textContent = f.blurb || '';
+      b.append(c, name, blurb);
+      b.onclick = () => pickType(f);
+      grid.appendChild(b);
+    }
+    list.appendChild(sec);
+  }
+  typeSearch.addEventListener('input', filterTypes);
+  typeDlg.addEventListener('keydown', typeKeys);
+  typeDlg.addEventListener('click', (e) => { if (e.target === typeDlg) closeTypes(); });
+  $('#typeClose').onclick = closeTypes;
+}
+
+const typesOpen = () => !typeDlg.classList.contains('hidden');
+const visibleCards = () => [...typeDlg.querySelectorAll('.type-card')].filter((c) => !c.classList.contains('hidden'));
+
+function openTypes() {
+  hideSplash();
+  typeDlg.classList.remove('hidden');
+  typeSearch.value = '';
+  filterTypes();
+  typeDlg.querySelectorAll('.type-card').forEach((c) => c.classList.toggle('on', c.dataset.id === S.f.id));
+  typeSearch.focus();
+  renderThumbs();
+}
+function closeTypes() {
+  typeDlg.classList.add('hidden');
+  canvas.focus?.();
+}
+function pickType(f) {
+  closeTypes();
+  setFormula(f);
+  toast(f.name);
+}
+
+function filterTypes() {
+  const q = typeSearch.value.trim().toLowerCase();
+  const words = q.split(/\s+/).filter(Boolean);
+  typeDlg.querySelectorAll('.type-card').forEach((c) => {
+    c.classList.toggle('hidden', !words.every((w) => c.dataset.search.includes(w)));
+  });
+  typeDlg.querySelectorAll('.type-fam').forEach((sec) => {
+    sec.classList.toggle('hidden', !sec.querySelector('.type-card:not(.hidden)'));
+  });
+  $('#typeEmpty').classList.toggle('hidden', visibleCards().length > 0);
+}
+
+function typeKeys(e) {
+  e.stopPropagation(); // keep the main view's shortcuts out of the dialog
+  const cards = visibleCards();
+  const cur = document.activeElement;
+  if (e.key === 'Escape') { e.preventDefault(); closeTypes(); return; }
+  if (e.key === 'Enter' && cur === typeSearch) {
+    e.preventDefault();
+    if (cards[0]) cards[0].click();
+    return;
+  }
+  const dirs = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+  if (!(e.key in dirs) || !cards.length) return;
+  if (cur === typeSearch) {
+    if (e.key !== 'ArrowDown') return; // let the text cursor move
+    e.preventDefault(); cards[0].focus(); return;
+  }
+  const i = cards.indexOf(cur);
+  if (i < 0) return;
+  e.preventDefault();
+  const [dx, dy] = dirs[e.key];
+  if (dx) { (cards[i + dx] || cur).focus(); return; }
+  // vertical: nearest card in the next row up or down, by geometry
+  const r = cur.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+  let best = null, bestD = Infinity;
+  for (const c of cards) {
+    if (c === cur) continue;
+    const q = c.getBoundingClientRect(), qy = q.top + q.height / 2;
+    if (dy > 0 ? qy <= cy + 4 : qy >= cy - 4) continue;
+    const d = Math.abs(qy - cy) * 4 + Math.abs(q.left + q.width / 2 - cx);
+    if (d < bestD) { bestD = d; best = c; }
+  }
+  if (best) best.focus();
+  else if (dy < 0) typeSearch.focus();
+}
+
+function thumbOrbit(f, maxIter) {
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js', import.meta.url));
+  return new Promise((resolve) => {
+    const id = Math.random();
+    thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };
+    thumbWorker.postMessage({
+      id, formula: f.code, julia: false, F: 80,
+      rx: parseFixed(f.home[0]).toString(), ry: parseFixed(f.home[1]).toString(), jx: '0', jy: '0',
+      maxIter, bail2: BAIL * BAIL,
+    });
+  });
+}
+
+// Render each type's overview with the current palette, one per animation frame.
+async function renderThumbs() {
+  const key = JSON.stringify(colorParams());
+  if (key !== thumbKey || thumbPalData !== S.palData) { thumbCache.clear(); thumbKey = key; thumbPalData = S.palData; }
+  if (thumbBusy) return;
+  thumbBusy = true;
+  try {
+    for (const card of typeDlg.querySelectorAll('.type-card')) {
+      if (!typesOpen()) break;
+      const f = FORMULAS.find((q) => q.id === card.dataset.id);
+      const ctx = card.querySelector('canvas').getContext('2d');
+      let img = thumbCache.get(f.id);
+      if (!img) {
+        const maxIter = 600;
+        const m = await thumbOrbit(f, maxIter);
+        R.uploadOrbit(m.data, m.count, R.thumbOrbitTex);
+        img = R.thumbnail({
+          formula: f.code, julia: false, refOffX: 0, refOffY: 0, scale: f.home[2] * 1.05, ySign: f.ySign,
+          maxIter, lenA: m.lenA, offB: m.offB, lenB: m.lenB, bail: BAIL, degree: f.degree, orbitTex: R.thumbOrbitTex,
+        }, colorParams(), THUMB_W, THUMB_H);
+        thumbCache.set(f.id, img);
+        await new Promise((r) => requestAnimationFrame(r));
+      }
+      ctx.putImageData(img, 0, 0);
+    }
+  } finally { thumbBusy = false; }
+  // palette changed while we were busy? go again
+  if (typesOpen() && (JSON.stringify(colorParams()) !== thumbKey || thumbPalData !== S.palData)) renderThumbs();
+}
 
 // ---------------------------------------------------------------- boot
 // #fly=<journey> starts a flight from the overview, e.g. #fly=the-abyss

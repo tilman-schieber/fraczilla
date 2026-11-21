@@ -120,6 +120,33 @@ input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 12px;
 input[type=range]::-moz-range-track { height: 6px; background: var(--black); border: 1px solid var(--cyan-dk); }
 input[type=range]::-moz-range-thumb { width: 12px; height: 18px; background: var(--yellow); border: 0; border-radius: 0; }
 
+/* --- type browser --- */
+.btn.more { background: var(--cyan-dk); color: var(--black); }
+#typeNow { margin: 2px 0 4px; color: var(--cyan); }
+#typeNow:empty { display: none; }
+.type-box { max-width: 1100px; width: 100%; max-height: 92vh; display: flex; flex-direction: column; margin: 0; padding-top: 22px; }
+.type-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.type-head label { color: var(--cyan); white-space: nowrap; }
+#typeSearch {
+  flex: 1; min-width: 0; font: inherit; font-size: 22px; background: var(--black); color: var(--yellow);
+  border: 2px solid var(--cyan-dk); padding: 2px 8px; outline: none;
+}
+#typeSearch:focus { border-color: var(--yellow); }
+#typeList { overflow-y: auto; overscroll-behavior: contain; padding: 4px 6px 4px 2px; }
+.type-fam h3 { font-weight: normal; font-size: 20px; color: var(--yellow); margin: 10px 0 8px; }
+.type-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+.type-card {
+  font: inherit; text-align: left; color: var(--white); background: var(--blue-dk);
+  border: 2px solid var(--cyan-dk); padding: 6px; cursor: pointer; display: flex; flex-direction: column; gap: 4px;
+}
+.type-card canvas { width: 100%; aspect-ratio: 240 / 150; display: block; background: #000; }
+.type-card:hover, .type-card:focus-visible { border-color: var(--yellow); outline: none; background: #00008a; }
+.type-card.on { border-color: var(--yellow); box-shadow: 0 0 0 2px var(--yellow) inset; }
+.type-name { color: var(--yellow); display: flex; justify-content: space-between; gap: 6px; flex-wrap: wrap; }
+.type-blurb { font-size: 16px; color: var(--gray); line-height: 1.05; }
+.badge { font-size: 14px; color: var(--black); background: var(--cyan); padding: 0 4px; white-space: nowrap; align-self: center; }
+.type-foot { margin-top: 8px; }
+
 /* --- modals --- */
 .modal {
   position: fixed; inset: 0; z-index: 20; display: flex; align-items: center; justify-content: center;

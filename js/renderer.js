@@ -174,6 +174,7 @@ export class Renderer {
     this.colorProg = this.link(VS, COLOR_FS);
 
     this.orbitTex = this.makeTex(gl.NEAREST);
+    this.thumbOrbitTex = this.makeTex(gl.NEAREST);
     this.palTex = this.makeTex(gl.LINEAR, gl.REPEAT);
     this.low = this.makeTarget(1, 1);
     this.full = this.makeTarget(1, 1);
@@ -238,11 +239,11 @@ export class Renderer {
     this.sizeTarget(this.full, W * aa, H * aa);
   }
 
-  uploadOrbit(data, count) {
+  uploadOrbit(data, count, tex = this.orbitTex) {
     const gl = this.gl, w = 2048, h = Math.max(1, Math.ceil(count / w));
     const buf = new Float32Array(w * h * 2);
     buf.set(data.subarray(0, count * 2));
-    gl.bindTexture(gl.TEXTURE_2D, this.orbitTex);
+    gl.bindTexture(gl.TEXTURE_2D, tex);
     gl.texImage2D(gl.TEXTURE_2D, 0, gl.RG32F, w, h, 0, gl.RG, gl.FLOAT, buf);
   }
 
@@ -262,7 +263,7 @@ export class Renderer {
     gl.useProgram(prog);
     gl.bindVertexArray(this.vao);
     gl.activeTexture(gl.TEXTURE0);
-    gl.bindTexture(gl.TEXTURE_2D, this.orbitTex);
+    gl.bindTexture(gl.TEXTURE_2D, P.orbitTex || this.orbitTex);
     const pix = 2 * P.scale / rh;
     gl.uniform1i(u('uOrbit'), 0);
     gl.uniform1i(u('uLenA'), P.lenA);
@@ -290,19 +291,20 @@ export class Renderer {
   }
 
   // C: { lowW, lowH, haveFull, doneY, density, offset, mapping, smooth, light, lightAngle, lightStr, edge, inside, insideColor }
-  composite(C) {
+  composite(C, out = null) {
     const gl = this.gl, prog = this.colorProg, u = prog.u;
-    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
-    gl.viewport(0, 0, this.canvas.width, this.canvas.height);
+    const ow = out ? out.w : this.canvas.width, oh = out ? out.h : this.canvas.height;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, out ? out.fbo : null);
+    gl.viewport(0, 0, ow, oh);
     gl.useProgram(prog);
     gl.bindVertexArray(this.vao);
-    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, this.low.tex);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, C.lowTex || this.low.tex);
     gl.activeTexture(gl.TEXTURE1); gl.bindTexture(gl.TEXTURE_2D, this.full.tex);
     gl.activeTexture(gl.TEXTURE2); gl.bindTexture(gl.TEXTURE_2D, this.palTex);
     gl.uniform1i(u('uLow'), 0); gl.uniform1i(u('uFull'), 1); gl.uniform1i(u('uPal'), 2);
     gl.uniform2f(u('uLowRes'), C.lowW, C.lowH);
     gl.uniform2f(u('uFullRes'), this.full.w, this.full.h);
-    gl.uniform2f(u('uOut'), this.canvas.width, this.canvas.height);
+    gl.uniform2f(u('uOut'), ow, oh);
     gl.uniform1f(u('uDoneY'), C.doneY);
     gl.uniform1i(u('uHaveFull'), C.haveFull ? 1 : 0);
     gl.uniform1f(u('uDensity'), C.density);
@@ -317,5 +319,35 @@ export class Renderer {
     gl.uniform1i(u('uInside'), C.inside);
     gl.uniform3fv(u('uInsideColor'), C.insideColor);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
+  }
+
+  // Render a small fully colored picture offscreen and return it as ImageData.
+  // P must carry orbitTex: this.thumbOrbitTex (so the main reference stays intact).
+  thumbnail(P, C, w, h) {
+    const gl = this.gl;
+    if (!this.thumbData) {
+      this.thumbData = this.makeTarget(w, h);
+      const tex = this.makeTex(gl.NEAREST), fbo = gl.createFramebuffer();
+      this.thumbOut = { tex, fbo, w: 0, h: 0 };
+    }
+    this.sizeTarget(this.thumbData, w, h);
+    const o = this.thumbOut;
+    if (o.w !== w || o.h !== h) {
+      gl.bindTexture(gl.TEXTURE_2D, o.tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, o.fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, o.tex, 0);
+      o.w = w; o.h = h;
+    }
+    this.drawFractal(this.thumbData, w, h, P);
+    this.composite({ ...C, lowTex: this.thumbData.tex, lowW: w, lowH: h, haveFull: false, doneY: h }, o);
+    const px = new Uint8ClampedArray(w * h * 4);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, o.fbo);
+    gl.readPixels(0, 0, w, h, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    // GL rows are bottom-up; ImageData is top-down
+    const img = new ImageData(w, h), row = w * 4;
+    for (let y = 0; y < h; y++) img.data.set(px.subarray((h - 1 - y) * row, (h - y) * row), y * row);
+    return img;
   }
 }
