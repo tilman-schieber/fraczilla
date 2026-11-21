@@ -1,10 +1,10 @@
-import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=0e763da7';
-import { PALETTES, randomPalette } from './palettes.js?v=0e763da7';
-import { LOCATIONS, START } from './locations.js?v=0e763da7';
-import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=0e763da7';
-import { FRACTALS, FAMILIES } from './fractals.js?v=0e763da7';
-import { muxWebM } from './webm.js?v=0e763da7';
-import { asciiLogoSVG } from './logo.js?v=0e763da7';
+import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=5894ed56';
+import { PALETTES, randomPalette } from './palettes.js?v=5894ed56';
+import { LOCATIONS, START } from './locations.js?v=5894ed56';
+import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=5894ed56';
+import { FRACTALS, FAMILIES } from './fractals.js?v=5894ed56';
+import { muxWebM } from './webm.js?v=5894ed56';
+import { asciiLogoSVG } from './logo.js?v=5894ed56';
 
 const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
@@ -62,7 +62,7 @@ function maxIter() {
 let worker, ref = null, pend = null, reqId = 0;
 function startWorker() {
   if (worker) worker.terminate();
-  worker = new Worker(new URL('./refworker.js?v=0e763da7', import.meta.url));
+  worker = new Worker(new URL('./refworker.js?v=5894ed56', import.meta.url));
   worker.onmessage = (e) => {
     const m = e.data;
     if (!pend || m.id !== pend.id) return;
@@ -212,6 +212,7 @@ function frame(now) {
   if (now - fpsT > 500) { fps = Math.round(fpsCount * 1000 / (now - fpsT)); fpsCount = 0; fpsT = now; }
 
   animate(dt);
+  stepJuliaPreview();
   if (S.cycling) {
     S.offset = ((S.offset + S.cycleSpeed * dt) % 256 + 256) % 256;
     colorDirty = true;
@@ -819,6 +820,7 @@ window.addEventListener('keydown', (e) => {
   }
   switch (k) {
     case ' ': toggleJulia(mouse?.x, mouse?.y); break;
+    case 'j': case 'J': setJuliaPreview(!jpv.on); break;
     case 'a': case 'A': S.autopilot ? stopAutopilot('AUTOPILOT OFF') : startAutopilot(); break;
     case 't': case 'T': { const js = currentJourneys(); goLocation(js[(locIdx = (locIdx + 1) % js.length)]); } break;
     case 'c': case 'C': S.cycling = !S.cycling; toast(S.cycling ? 'COLOR CYCLING ON (+/− speed)' : 'COLOR CYCLING OFF'); syncUI(); break;
@@ -946,6 +948,7 @@ function buildUI() {
     });
   }
   $('#juliaBtn').onclick = () => toggleJulia(null);
+  $('#jpvBtn').onclick = () => setJuliaPreview(!jpv.on);
 
   const pwrap = $('#palettes');
   PALETTES.forEach((p, i) => {
@@ -1082,6 +1085,8 @@ function syncUI() {
   $('#typeNow').textContent = S.f.quick ? '' : `NOW: ${S.f.name} · ${fam ? fam.name.toLowerCase() : ''}`;
   document.querySelectorAll('#palettes .pal').forEach((b, i) => b.classList.toggle('on', i === S.pal));
   $('#juliaBtn').classList.toggle('on', S.julia);
+  $('#jpvBtn').classList.toggle('on', jpv.on);
+  $('#jpvBtn').disabled = S.f.julia === false;
   const jc = $('#juliaC');
   jc.textContent = S.julia ? `c = ${fmtC(S.jx, S.jy, 8)}  ✎` : (S.f.julia === false ? '' : 'SPACE over any point opens its Julia set');
   jc.classList.toggle('editable', S.julia);
@@ -1614,7 +1619,7 @@ function typeKeys(e) {
 }
 
 function thumbOrbit(f, maxIter) {
-  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=0e763da7', import.meta.url));
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=5894ed56', import.meta.url));
   return new Promise((resolve) => {
     const id = Math.random();
     thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };
@@ -1632,7 +1637,7 @@ let picWorker = null;
 const picWait = new Map();
 function picOrbit(f, julia, cx, cy, jx, jy, F, maxIter) {
   if (!picWorker) {
-    picWorker = new Worker(new URL('./refworker.js?v=0e763da7', import.meta.url));
+    picWorker = new Worker(new URL('./refworker.js?v=5894ed56', import.meta.url));
     picWorker.onmessage = (e) => { const r = picWait.get(e.data.id); if (r) { picWait.delete(e.data.id); r(e.data); } };
   }
   return new Promise((resolve) => {
@@ -1659,6 +1664,47 @@ async function picture(f, v, w, h, C = colorParams()) {
     centerX: toDouble(cx), centerY: toDouble(cy), jcX: toDouble(jx), jcY: toDouble(jy),
     seq: seqBits(f.seq), seqLen: (f.seq || 'A').length,
   }, C, w, h);
+}
+
+// ---------------------------------------------------------------- live Julia preview
+// J: a small inset next to the mouse shows the Julia set of the point under it.
+const jpv = { on: false, busy: false, key: '', shown: false, el: $('#jpv'), cv: $('#jpvCanvas'), label: $('#jpvC') };
+try { jpv.on = localStorage.getItem('fraczilla.jpreview') === '1'; } catch {}
+function setJuliaPreview(on) {
+  jpv.on = on;
+  try { localStorage.setItem('fraczilla.jpreview', on ? '1' : '0'); } catch {}
+  if (!on) hideJuliaPreview();
+  toast(on ? 'JULIA PREVIEW: move over the edge of the set, SPACE opens the one you like' : 'JULIA PREVIEW OFF');
+  syncUI();
+}
+function hideJuliaPreview() {
+  if (!jpv.shown) return;
+  jpv.el.classList.add('hidden'); jpv.shown = false; jpv.key = '';
+}
+function stepJuliaPreview() {
+  if (!jpv.on || !mouse || S.julia || S.f.julia === false || pointers.size || anim.flight || S.autopilot ||
+      typesOpen() || hq || renderOpen() || !$('#help').classList.contains('hidden')) { hideJuliaPreview(); return; }
+  const W = jpv.el.offsetWidth || 256, H = jpv.el.offsetHeight || 210;
+  let x = mouse.x + 28, y = mouse.y + 28;
+  const panel = $('#panel'), right = panel.classList.contains('closed') ? cssW : panel.getBoundingClientRect().left;
+  if (x + W > right - 8) x = mouse.x - 28 - W;
+  if (y + H > cssH - 8) y = mouse.y - 28 - H;
+  jpv.el.style.transform = `translate(${Math.max(4, x)}px, ${Math.max(4, y)}px)`;
+  const key = `${S.f.id}|${mouse.x}|${mouse.y}|${viewVer}|${S.pal}|${pal.t}|${S.density.toFixed(2)}|${S.mapping}|${S.smooth}|${S.light}`;
+  if (jpv.busy || key === jpv.key) return;
+  jpv.busy = true; jpv.key = key;
+  const [ox, oy] = screenOffset(mouse.x, mouse.y);
+  const jx = S.cx + fromDouble(ox), jy = S.cy + fromDouble(oy), f = S.f, h = juliaHome(f);
+  const cv = jpv.cv;
+  picture(f, { jx, jy, x: h.x, y: h.y, s: h.s * 1.1, maxIter: 400 }, cv.width, cv.height, { ...colorParams(), offset: S.offset })
+    .then((img) => {
+      if (!jpv.on || S.julia || f !== S.f) return;
+      cv.getContext('2d').putImageData(img, 0, 0);
+      jpv.label.textContent = `c = ${fmtC(jx, jy, 5)}`;
+      if (!jpv.shown) { jpv.el.classList.remove('hidden'); jpv.shown = true; }
+    })
+    .catch((e) => console.warn('julia preview', e))
+    .finally(() => { jpv.busy = false; });
 }
 
 // Render each type's overview with the current palette, one per animation frame.

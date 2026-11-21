@@ -227,3 +227,14 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 18px; background: var
 .list button.here { color: var(--yellow); }
 #juliaC.editable { cursor: pointer; color: var(--yellow); }
 #juliaC.editable:hover { text-decoration: underline; }
+
+/* live Julia preview next to the mouse */
+#jpv {
+  position: fixed; left: 0; top: 0; z-index: 4; pointer-events: none;
+  background: var(--blue); border: 4px double var(--cyan); box-shadow: 6px 6px 0 rgba(0, 0, 0, .6);
+  will-change: transform;
+}
+#jpv canvas { display: block; width: 256px; height: 192px; }
+#jpvC { font-size: 16px; color: var(--yellow); padding: 0 6px; white-space: nowrap; }
+.btn:disabled { opacity: .45; cursor: default; }
+@media (pointer: coarse) { #jpvRow { display: none; } }

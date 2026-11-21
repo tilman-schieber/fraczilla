@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=0e763da7">
+<link rel="stylesheet" href="css/style.css?v=5894ed56">
 </head>
 <body>
 <canvas id="c"></canvas>
@@ -36,6 +36,9 @@
     <div id="typeNow" class="small dim"></div>
     <div class="row">
       <button id="juliaBtn" class="btn wide" title="Space">MANDEL ⇄ JULIA <kbd>SPACE</kbd></button>
+    </div>
+    <div id="jpvRow" class="row">
+      <button id="jpvBtn" class="btn wide" title="J: show the Julia set of the point under the mouse">👁 JULIA PREVIEW <kbd>J</kbd></button>
     </div>
     <div id="juliaC" class="small dim"></div>
     <div id="jcRow" class="row jc-row hidden" title="Type a Julia constant c and press ENTER">
@@ -115,6 +118,7 @@
       <tr><td>DRAG</td><td>pan</td></tr>
       <tr><td>DOUBLE-CLICK</td><td>zoom in 4× (SHIFT: out)</td></tr>
       <tr><td>SPACE</td><td>Mandelbrot ⇄ Julia at the cursor</td></tr>
+      <tr><td>J</td><td>live Julia preview of the point under the mouse</td></tr>
       <tr><td>A</td><td>autopilot: endless dive toward detail</td></tr>
       <tr><td>T</td><td>fly to the next journey destination</td></tr>
       <tr><td>C</td><td>color cycling on/off</td></tr>
@@ -157,6 +161,8 @@
   </div>
 </div>
 
+<div id="jpv" class="hidden" aria-hidden="true"><canvas id="jpvCanvas" width="384" height="288"></canvas><div id="jpvC"></div></div>
+
 <div id="frameBox" class="hidden" aria-hidden="true"><span id="frameLabel"></span></div>
 
 <div id="renderDlg" class="box float-box hidden" role="dialog" aria-label="Render video or image">
@@ -186,6 +192,6 @@
 <div id="toast"></div>
 <div id="error" class="modal hidden"><div class="box modal-box"><div class="box-title">ERROR</div><p id="errorMsg"></p></div></div>
 
-<script type="module" src="js/main.js?v=0e763da7"></script>
+<script type="module" src="js/main.js?v=5894ed56"></script>
 </body>
 </html>
