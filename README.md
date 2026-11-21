@@ -15,3 +15,5 @@ A GPU deep-zoom fractal explorer in the spirit of the classic DOS fractal progra
 Link straight to a journey with `#fly=<name>`, for example https://gh.tschieber.de/fraczilla/#fly=the-abyss. Add `&hq=1` to prerender it in full quality first: the dive is rendered as anti-aliased keyframes one octave apart, composed into a 60 fps WebM video (WebCodecs) and played back; the video can be saved. The **SHARE DIVE TO HERE** button copies a link that replays a dive from the overview to the current view, with the current colors.
 
 Serve the folder statically (for example `python3 -m http.server`) and open `index.html`. Press `H` in the app for the key list.
+
+Before deploying, run `python3 tools/stamp.py`: it version-stamps the asset URLs so browsers never mix cached old modules with new ones.
