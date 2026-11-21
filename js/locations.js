@@ -53,7 +53,7 @@ export const LOCATIONS = [
   { name: 'The Whole Magnet II', f: 'magnet2', x: '1.2', y: '0', s: 2.4 },
   { name: 'Bubble Cove', f: 'magnet2', x: '1.12168307', y: '-1.0398183', s: 0.00398 },
   { name: 'The Whole Spider', f: 'spider', x: '-0.4', y: '0', s: 1.4 },
-  { name: 'Spider Rings', f: 'spider', x: '-0.000032154', y: '-0.000003068', s: 0.00003 },
+  { name: 'Spider Rings', f: 'spider', x: '-0.00076639', y: '-0.00000793', s: 0.000617031 },
   { name: 'The Whole Barnsley', f: 'barnsley1', x: '0', y: '0', s: 1.6 },
   { name: 'Shattered Glass', f: 'barnsley1', x: '0.99248054', y: '-0.70423388', s: 0.0651 },
   { name: 'The Whole Sine', f: 'sine', x: '0', y: '0', s: 3.2 },
