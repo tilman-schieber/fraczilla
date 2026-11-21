@@ -9,6 +9,11 @@ const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
 const MIN_SCALE = 1e-31, MAX_SCALE = 8, BAIL = 1000, HOME_SCALE = 1.25;
 
+// zoom floor: float-only types run out of precision near 10^5x
+const minScale = () => (S.f.deep ? MIN_SCALE : (S.f.minScale || 3e-5));
+// Lyapunov forcing sequence as bits (B = 1), read from bit 0 upwards
+const seqBits = (seq) => [...(seq || 'A')].reduce((acc, ch, i) => acc | ((ch === 'B' ? 1 : 0) << i), 0);
+
 const $ = (s) => document.querySelector(s);
 const canvas = $('#c');
 
@@ -89,7 +94,7 @@ function refReason() {
 }
 
 function ensureRef() {
-  if (!refReason()) return;
+  if (!S.f.deep || !refReason()) return;
   if (pend) {
     if (pend.key === refKey()) return;
     startWorker();
@@ -105,7 +110,7 @@ function screenOffset(px, py) {
   return [(px - cssW / 2) * k, (cssH / 2 - py) * k * S.f.ySign];
 }
 function zoomAt(px, py, factor) {
-  const ns = Math.min(MAX_SCALE, Math.max(MIN_SCALE, S.scale * factor));
+  const ns = Math.min(MAX_SCALE, Math.max(minScale(), S.scale * factor));
   const nf = ns / S.scale;
   const [ox, oy] = screenOffset(px, py);
   S.cx += fromDouble(ox * (1 - nf));
@@ -149,11 +154,20 @@ function colorParams() {
 }
 
 function fractalParams() {
+  const deep = S.f.deep && ref;
   return {
     formula: S.f.code, julia: S.julia,
-    refOffX: toDouble(S.cx - ref.x), refOffY: toDouble(S.cy - ref.y),
+    refOffX: deep ? toDouble(S.cx - ref.x) : 0, refOffY: deep ? toDouble(S.cy - ref.y) : 0,
     scale: S.scale, ySign: S.f.ySign, maxIter: maxIter(),
-    lenA: ref.lenA, offB: ref.offB, lenB: ref.lenB, bail: BAIL, degree: S.f.degree,
+    lenA: deep ? ref.lenA : 0, offB: deep ? ref.offB : 0, lenB: deep ? ref.lenB : 0,
+    bail: S.f.deep ? BAIL : (S.f.code === 102 || S.f.code === 103 ? 100 : 256), degree: S.f.degree,
+    // lambda needs the reference's c (Mandelbrot mode) or λ (Julia mode); critical point 1/2
+    cX: S.julia ? toDouble(S.jx) : deep ? toDouble(ref.x) : 0,
+    cY: S.julia ? toDouble(S.jy) : deep ? toDouble(ref.y) : 0,
+    crit: S.f.code === 7 ? 0.5 : 0,
+    // float path
+    centerX: toDouble(S.cx), centerY: toDouble(S.cy), jcX: toDouble(S.jx), jcY: toDouble(S.jy),
+    seq: seqBits(S.f.seq), seqLen: (S.f.seq || 'A').length,
   };
 }
 
@@ -177,7 +191,7 @@ function frame(now) {
   }
 
   ensureRef();
-  const refOk = ref && ref.key === refKey();
+  const refOk = !S.f.deep || (ref && ref.key === refKey());
   const fullComplete = fullVer === viewVer && fullDone >= R.full.h;
   if (refOk) {
     const moving = now - lastMove < 160 || animating();
@@ -260,7 +274,7 @@ function analyzeProbe(P) {
     if (Math.abs(maxIter() - before) > before * 0.15) invalidate(false);
   }
   // pick a longer-lived reference if the current one escapes too early
-  if (ref && ref.escaped && ref.lenA < maxIter() && !pend) {
+  if (S.f.deep && ref && ref.escaped && ref.lenA < maxIter() && !pend) {
     const idx = interiorIdx >= 0 ? interiorIdx : (maxEsc > ref.lenA + 2 ? maxIdx : -1);
     if (idx >= 0) {
       const [ox, oy] = pt(idx);
@@ -373,7 +387,7 @@ function autopilotChoose(P, buf, pw, maxEsc, pt) {
   const lw = 48;
   for (const c of offs) {
     const [ox, oy] = c.off;
-    const Q = { ...P, refOffX: P.refOffX + ox, refOffY: P.refOffY + oy, scale: S.scale / 4 };
+    const Q = { ...P, refOffX: P.refOffX + ox, refOffY: P.refOffY + oy, centerX: P.centerX + ox, centerY: P.centerY + oy, scale: S.scale / 4 };
     const pb = R.probe(Q, lw);
     const st = speckle(pb, lw);
     if (st.sp < calmSp) { calmSp = st.sp; calm = c.off; }
@@ -460,7 +474,7 @@ function stepFlight(dt) {
     return;
   }
   const k = f.w0 / (f.rho * f.rho), A = f.rho * s + f.r0;
-  S.scale = Math.max(MIN_SCALE, f.w0 * Math.cosh(f.r0) / Math.cosh(A));
+  S.scale = Math.max(minScale(), f.w0 * Math.cosh(f.r0) / Math.cosh(A));
   const u = k * Math.sinh(f.rho * s) / Math.cosh(A);
   if (u < f.u1 / 2) {
     S.cx = f.sx + fromDouble(f.dirx * u); S.cy = f.sy + fromDouble(f.diry * u);
@@ -483,7 +497,7 @@ function stopAutopilot(msg) {
 }
 function stepAutopilot(dt) {
   const f = Math.exp((performance.now() < apReverseUntil ? 1.5 : -1) * S.apSpeed * dt);
-  if (S.scale * f < MIN_SCALE) { stopAutopilot('Precision floor reached at 10³⁰× — what a dive!'); return; }
+  if (S.scale * f < minScale()) { stopAutopilot(S.f.deep ? 'Precision floor reached at 10³⁰× — what a dive!' : 'Zoom limit for this type (10⁵×): it has no deep-zoom path'); return; }
   S.scale = Math.min(MAX_SCALE, S.scale * f);
   if (apTarget) {
     const k = 1 - Math.exp(-dt * 1.6);
@@ -502,6 +516,7 @@ function setFormula(f, keepView = false) {
 }
 
 function toggleJulia(px, py) {
+  if (S.f.julia === false && !S.julia) { toast(`${S.f.name} HAS NO JULIA MODE`); return; }
   stopMotion();
   if (!S.julia) {
     const [ox, oy] = px != null ? screenOffset(px, py) : [0, 0];
@@ -621,7 +636,7 @@ function readHash() {
     S.f = FORMULAS.find((q) => q.id === p.get('f')) || FORMULAS[0];
     if (p.has('x')) S.cx = parseFixed(p.get('x'));
     if (p.has('y')) S.cy = parseFixed(p.get('y'));
-    if (p.has('s')) S.scale = Math.min(MAX_SCALE, Math.max(MIN_SCALE, parseFloat(p.get('s')) || HOME_SCALE));
+    if (p.has('s')) S.scale = Math.min(MAX_SCALE, Math.max(minScale(), parseFloat(p.get('s')) || HOME_SCALE));
     if (p.has('jx')) { S.julia = true; S.jx = parseFixed(p.get('jx')); S.jy = parseFixed(p.get('jy') || '0'); }
     if (p.has('p')) { const i = +p.get('p'); if (PALETTES[i]) { S.pal = i; S.palData = PALETTES[i].data; } }
     if (p.has('d')) S.density = +p.get('d') || 0;
@@ -910,7 +925,9 @@ function juliaJourneys() {
 
 function currentJourneys() {
   if (S.julia) return juliaJourneys();
-  return LOCATIONS.filter((l) => l.f === S.f.id);
+  const list = LOCATIONS.filter((l) => l.f === S.f.id);
+  if (!list.length) list.push({ name: `The Whole ${S.f.name.toLowerCase().replace(/(^|\s)\S/g, (c) => c.toUpperCase())}`, f: S.f.id, x: S.f.home[0], y: S.f.home[1], s: S.f.home[2] });
+  return list;
 }
 function buildLocations() {
   const key = S.f.id + (S.julia ? `J${S.jx},${S.jy}` : '');
@@ -1358,11 +1375,14 @@ async function renderThumbs() {
       let img = thumbCache.get(f.id);
       if (!img) {
         const maxIter = 600;
-        const m = await thumbOrbit(f, maxIter);
-        R.uploadOrbit(m.data, m.count, R.thumbOrbitTex);
+        const m = f.deep ? await thumbOrbit(f, maxIter) : { lenA: 0, offB: 0, lenB: 0 };
+        if (f.deep) R.uploadOrbit(m.data, m.count, R.thumbOrbitTex);
+        const hx = parseFloat(f.home[0]), hy = parseFloat(f.home[1]);
         img = R.thumbnail({
           formula: f.code, julia: false, refOffX: 0, refOffY: 0, scale: f.home[2] * 1.05, ySign: f.ySign,
-          maxIter, lenA: m.lenA, offB: m.offB, lenB: m.lenB, bail: BAIL, degree: f.degree, orbitTex: R.thumbOrbitTex,
+          maxIter, lenA: m.lenA, offB: m.offB, lenB: m.lenB, bail: f.deep ? BAIL : (f.code === 102 || f.code === 103 ? 100 : 256),
+          degree: f.degree, orbitTex: R.thumbOrbitTex,
+          cX: hx, cY: hy, crit: f.code === 7 ? 0.5 : 0, centerX: hx, centerY: hy, seq: seqBits(f.seq), seqLen: (f.seq || 'A').length,
         }, colorParams(), THUMB_W, THUMB_H);
         thumbCache.set(f.id, img);
         await new Promise((r) => requestAnimationFrame(r));
@@ -1397,4 +1417,4 @@ resize();
 requestAnimationFrame(frame);
 
 // handy for debugging from the console
-window.fraczilla = { S, get ref() { return ref; }, get state() { return { viewVer, lowVer, fullVer, fullDone, fullH: R.full.h, probedVer, pend: !!pend, refOk: !!ref && ref.key === refKey() }; }, flyTo: (x, y, s) => flyTo(parseFixed(x), parseFixed(y), s) };
+window.fraczilla = { S, R, get params() { return fractalParams(); }, get ref() { return ref; }, get state() { return { viewVer, lowVer, fullVer, fullDone, fullH: R.full.h, probedVer, pend: !!pend, refOk: !!ref && ref.key === refKey() }; }, flyTo: (x, y, s) => flyTo(parseFixed(x), parseFixed(y), s) };

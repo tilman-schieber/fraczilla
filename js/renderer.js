@@ -14,7 +14,9 @@ uniform sampler2D uOrbit;
 uniform int uLenA, uOffB, uLenB, uMaxIter, uJulia;
 uniform vec2 uRefOff, uRes;
 uniform float uPix, uYSign, uBail2, uLogBail, uLogDeg;
+uniform vec2 uC, uCrit; // lambda: the reference c (or Julia λ); critical point of the formula
 out vec4 o;
+vec2 gDc = vec2(0.0);   // lambda: this pixel's offset in c
 
 vec2 orb(int i) { return texelFetch(uOrbit, ivec2(i & 2047, i >> 11), 0).xy; }
 vec2 cmul(vec2 a, vec2 b) { return vec2(a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x); }
@@ -39,9 +41,28 @@ vec2 pert(vec2 Z, vec2 d) {
   return vec2(re, im);
 #elif FORMULA == 4
   return cmul(d, 3.0*cmul(Z, Z) + 3.0*cmul(Z, d) + cmul(d, d));
-#else
+#elif FORMULA == 5
   vec2 Z2 = cmul(Z, Z), d2 = cmul(d, d);
   return cmul(d, 4.0*cmul(Z2, Z) + 6.0*cmul(Z2, d) + 4.0*cmul(Z, d2) + cmul(d2, d));
+#elif FORMULA == 6
+  vec2 Z2 = cmul(Z, Z), Z3 = cmul(Z2, Z), d2 = cmul(d, d), d3 = cmul(d2, d);
+  return cmul(d, 5.0*cmul(Z3, Z) + 10.0*cmul(Z3, d) + 10.0*cmul(Z2, d2) + 5.0*cmul(Z, d3) + cmul(d3, d));
+#elif FORMULA == 7
+  // c·z(1-z): with W = Z(1-Z) and dW = d(1 - 2Z - d), dz' = C·dW + dc·(W + dW)
+  vec2 W = cmul(Z, vec2(1.0, 0.0) - Z), dW = cmul(d, vec2(1.0, 0.0) - 2.0*Z - d);
+  return cmul(uC, dW) + cmul(gDc, W + dW);
+#elif FORMULA == 8
+  float re = diffabs(Z.x*Z.x - Z.y*Z.y, (2.0*Z.x + d.x)*d.x - (2.0*Z.y + d.y)*d.y);
+  float im = 2.0*diffabs(Z.x*Z.y, Z.x*d.y + d.x*Z.y + d.x*d.y);
+  return vec2(re, im);
+#elif FORMULA == 9
+  float re = (2.0*Z.x + d.x)*d.x - (2.0*Z.y + d.y)*d.y;
+  float im = -2.0*(Z.x*diffabs(Z.y, d.y) + d.x*abs(Z.y + d.y));
+  return vec2(re, im);
+#else
+  float re = (2.0*Z.x + d.x)*d.x - (2.0*Z.y + d.y)*d.y;
+  float im = -2.0*(diffabs(Z.x, d.x)*Z.y + abs(Z.x + d.x)*d.y);
+  return vec2(re, im);
 #endif
 }
 vec2 dfz(vec2 z, vec2 der) {
@@ -49,6 +70,11 @@ vec2 dfz(vec2 z, vec2 der) {
   return 3.0*cmul(cmul(z, z), der);
 #elif FORMULA == 5
   return 4.0*cmul(cmul(cmul(z, z), z), der);
+#elif FORMULA == 6
+  vec2 z2 = cmul(z, z);
+  return 5.0*cmul(cmul(z2, z2), der);
+#elif FORMULA == 7
+  return cmul(cmul(uC + gDc, vec2(1.0, 0.0) - 2.0*z), der);
 #elif FORMULA == 2
   vec2 r = 2.0*cmul(z, der); return vec2(r.x, -r.y);
 #else
@@ -66,6 +92,9 @@ void main() {
   vec2 dcT = julia ? vec2(0.0) : dc;
   vec2 der = julia ? vec2(uPix, 0.0) : vec2(0.0);
   float derAdd = julia ? 0.0 : uPix;
+#if FORMULA == 7
+  gDc = dcT; dcT = vec2(0.0); // lambda folds dc into pert()
+#endif
   int m = 0, off = 0, len = uLenA;
   vec2 z = orb(0) + dz;
   float r2 = dot(z, z);
@@ -79,7 +108,7 @@ void main() {
     r2 = dot(z, z);
     if (r2 > uBail2) { esc = true; break; }
     // Zhuoran's rebasing: hop to the critical orbit when we get closer to it
-    if (m >= len - 1 || amax(z) < amax(dz)) { dz = z; m = 0; off = uOffB; len = uLenB; }
+    if (m >= len - 1 || amax(z - uCrit) < amax(dz)) { dz = z - uCrit; m = 0; off = uOffB; len = uLenB; }
   }
   if (esc) {
     float lz = 0.5*log(r2);
@@ -88,13 +117,134 @@ void main() {
     bool ok = dl > 0.0 && dl < 1e37;
     float de = ok ? sqrt(r2) * lz / dl : 0.0;
     vec2 u = vec2(0.0);
-#if FORMULA != 1 && FORMULA != 3
+#if FORMULA != 1 && FORMULA != 3 && FORMULA < 8
     if (ok) { u = vec2(dot(z, der), z.y*der.x - z.x*der.y); u /= max(length(u), 1e-30); }
 #endif
     o = vec4(max(mu, 0.0), de, u);
   } else {
     o = vec4(-1.0, r2, 0.0, 0.0);
   }
+}`;
+
+// Direct float32 iteration for formulas without a deep-zoom path (codes >= 100).
+// Same output layout as the deep shader: (mu, DE, normal.x, normal.y); mu < 0 = inside.
+// Basin types put 10 + rootIndex into .w so the color pass can tint each root.
+const shallowFS = (formula) => `#version 300 es
+precision highp float; precision highp int;
+#define FORMULA ${formula}
+uniform vec2 uRes, uCenter, uCenterLo, uJC;
+uniform float uPix, uYSign, uBail2;
+uniform int uMaxIter, uJulia, uSeq, uSeqLen;
+out vec4 o;
+const float PI = 3.14159265358979;
+vec2 cmul(vec2 a, vec2 b) { return vec2(a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x); }
+vec2 cdiv(vec2 a, vec2 b) { return vec2(a.x*b.x + a.y*b.y, a.y*b.x - a.x*b.y) / dot(b, b); }
+vec2 csin(vec2 z) { return vec2(sin(z.x)*cosh(z.y), cos(z.x)*sinh(z.y)); }
+const vec2 ONE = vec2(1.0, 0.0);
+// smooth convergence count: 0..1 extra depending on how far below eps the last step went
+float conv(int i, float step, float eps) { return float(i) + 1.0 - clamp(log2(log(max(step, 1e-30)) / log(eps)), 0.0, 1.0); }
+float esc(int i, vec2 z, float deg) { float lz = 0.5*log(dot(z, z)); return max(0.0, float(i) + 1.0 - log(lz / (0.5*log(uBail2))) / log(deg)); }
+float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+float vnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p), u = f*f*(3.0 - 2.0*f);
+  return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y);
+}
+
+void main() {
+  vec2 p = gl_FragCoord.xy - 0.5*uRes;
+  p.y *= uYSign;
+  vec2 pt = uCenter + (uCenterLo + p*uPix);
+  bool julia = uJulia == 1;
+  o = vec4(-1.0, 0.0, 0.0, 0.0);
+#if FORMULA == 100
+  // Newton's method for z^3 - 1: three basins, one per cube root of unity
+  vec2 z = pt;
+  for (int i = 0; i < uMaxIter; i++) {
+    vec2 z2 = cmul(z, z);
+    vec2 dz = cdiv(cmul(z2, z) - ONE, 3.0*z2);
+    z -= dz;
+    float st = length(dz);
+    if (st < 1e-5) {
+      float root = mod(floor(atan(z.y, z.x) / (2.0*PI/3.0) + 0.5) + 3.0, 3.0);
+      o = vec4(conv(i, st, 1e-5), 0.0, 0.0, 10.0 + root);
+      return;
+    }
+  }
+#elif FORMULA == 101
+  // Nova: z - (z^3-1)/(3z^2) + c, from the critical point z = 1
+  vec2 c = julia ? uJC : pt, z = julia ? pt : ONE;
+  for (int i = 0; i < uMaxIter; i++) {
+    vec2 z2 = cmul(z, z);
+    vec2 nz = z - cdiv(cmul(z2, z) - ONE, 3.0*z2) + c;
+    float st = length(nz - z);
+    z = nz;
+    if (st < 1e-5) { o = vec4(conv(i, st, 1e-5), 0.0, 0.0, 0.0); return; }
+    if (dot(z, z) > 1e8) return;
+  }
+#elif FORMULA == 102 || FORMULA == 103
+  // Magnet I / II (renormalisation of the Ising model); converging to 1 counts as inside
+  vec2 c = julia ? uJC : pt, z = julia ? pt : vec2(0.0);
+  vec2 c1 = c - ONE, c2 = c - 2.0*ONE, c12 = cmul(c1, c2);
+  for (int i = 0; i < uMaxIter; i++) {
+#if FORMULA == 102
+    vec2 q = cdiv(cmul(z, z) + c1, 2.0*z + c2);
+#else
+    vec2 z2 = cmul(z, z);
+    vec2 q = cdiv(cmul(z2, z) + 3.0*cmul(c1, z) + c12, 3.0*z2 + 3.0*cmul(c2, z) + c12 + ONE);
+#endif
+    z = cmul(q, q);
+    if (dot(z, z) > uBail2) { o = vec4(esc(i, z, 2.0), 0.0, 0.0, 0.0); return; }
+    float st = length(z - ONE);
+    if (st < 1e-5) { o = vec4(conv(i, st, 1e-5) * 3.0, 0.0, 0.0, 0.0); return; } // settled on the fixed point 1
+  }
+#elif FORMULA == 104
+  // Spider: z = z^2 + c; c = c/2 + z
+  vec2 z = pt, c = julia ? uJC : pt;
+  for (int i = 0; i < uMaxIter; i++) {
+    z = cmul(z, z) + c;
+    c = 0.5*c + z;
+    if (dot(z, z) > uBail2) { o = vec4(esc(i, z, 2.0), 0.0, 0.0, 0.0); return; }
+  }
+#elif FORMULA == 105
+  // Barnsley M1: (z -+ 1)·c depending on the sign of Re z
+  vec2 c = julia ? uJC : pt, z = pt;
+  for (int i = 0; i < uMaxIter; i++) {
+    z = cmul(z.x >= 0.0 ? z - ONE : z + ONE, c);
+    if (dot(z, z) > uBail2) { o = vec4(esc(i, z, 2.0), 0.0, 0.0, 0.0); return; }
+  }
+#elif FORMULA == 106
+  // c·sin(z) from the critical point pi/2; escapes when |Im z| gets large
+  vec2 c = julia ? uJC : pt, z = julia ? pt : vec2(PI/2.0, 0.0);
+  for (int i = 0; i < uMaxIter; i++) {
+    z = cmul(c, csin(z));
+    if (abs(z.y) > 50.0) { o = vec4(float(i) + 1.0 - clamp(log2(abs(z.y) / 50.0) / 5.0, 0.0, 1.0), 0.0, 0.0, 0.0); return; }
+  }
+#elif FORMULA == 107
+  // Lyapunov exponent of the logistic map, forcing sequence of a (bit 0) and b (bit 1)
+  float a = pt.x, b = pt.y;
+  if (a <= 0.0 || a > 4.0 || b <= 0.0 || b > 4.0) return;
+  float x = 0.5, sum = 0.0;
+  int n = min(uMaxIter, 2000), k = 0;
+  for (int i = 0; i < 60; i++) { float r = ((uSeq >> k) & 1) == 1 ? b : a; x = r*x*(1.0 - x); k = k + 1 == uSeqLen ? 0 : k + 1; }
+  for (int i = 0; i < n; i++) {
+    float r = ((uSeq >> k) & 1) == 1 ? b : a;
+    x = r*x*(1.0 - x);
+    sum += log(max(abs(r*(1.0 - 2.0*x)), 1e-30));
+    k = k + 1 == uSeqLen ? 0 : k + 1;
+  }
+  float lambda = sum / float(n);
+  if (lambda < 0.0) o = vec4(-lambda * 60.0, 0.0, 0.0, 0.0);
+  else o = vec4(-1.0, lambda, 0.0, 0.0); // chaos
+#elif FORMULA == 108
+  // Plasma: fractal value noise, octaves down to the pixel size (cycle the colors!)
+  float n = 0.0, amp = 0.5, freq = 1.5;
+  for (int i = 0; i < 26; i++) {
+    n += amp * (vnoise(pt * freq + float(i) * 17.17) - 0.5);
+    freq *= 2.0; amp *= 0.55;
+    if (1.0 / freq < uPix) break;
+  }
+  o = vec4((n + 0.5) * 384.0, 0.0, 0.0, 0.0);
+#endif
 }`;
 
 const COLOR_FS = `#version 300 es
@@ -118,6 +268,11 @@ vec3 shade(vec4 d) {
   }
   float n = uSmooth == 1 ? d.x : floor(d.x);
   float f = uMapping == 0 ? n : (uMapping == 1 ? sqrt(n) * 16.0 : log2(1.0 + n) * 32.0);
+  if (d.w >= 9.5) { // root basins: each root gets its own third of the palette, iterations shade within it
+    float root = d.w - 10.0;
+    vec3 b = pal(root * 85.333 + uOffset + f * uDensity * 0.35);
+    return b * (0.35 + 0.65 * exp(-0.08 * n));
+  }
   vec3 c = pal(f * uDensity + uOffset);
   if (uLight == 1 && d.z * d.z + d.w * d.w > 0.25) {
     float h = 1.25;
@@ -204,7 +359,7 @@ export class Renderer {
   }
 
   fractalProg(code) {
-    return this.progs[code] || (this.progs[code] = this.link(VS, fractalFS(code)));
+    return this.progs[code] || (this.progs[code] = this.link(VS, code >= 100 ? shallowFS(code) : fractalFS(code)));
   }
 
   makeTex(filter, wrap) {
@@ -280,6 +435,15 @@ export class Renderer {
     gl.uniform1f(u('uBail2'), P.bail * P.bail);
     gl.uniform1f(u('uLogBail'), Math.log(P.bail));
     gl.uniform1f(u('uLogDeg'), Math.log(P.degree));
+    gl.uniform2f(u('uC'), P.cX || 0, P.cY || 0);
+    gl.uniform2f(u('uCrit'), P.crit || 0, 0);
+    // float path: center split into hi + lo so nearby pixels keep their spacing
+    const hx = Math.fround(P.centerX || 0), hy = Math.fround(P.centerY || 0);
+    gl.uniform2f(u('uCenter'), hx, hy);
+    gl.uniform2f(u('uCenterLo'), (P.centerX || 0) - hx, (P.centerY || 0) - hy);
+    gl.uniform2f(u('uJC'), P.jcX || 0, P.jcY || 0);
+    gl.uniform1i(u('uSeq'), P.seq || 0);
+    gl.uniform1i(u('uSeqLen'), P.seqLen || 1);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.disable(gl.SCISSOR_TEST);
   }

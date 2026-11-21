@@ -150,7 +150,8 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 18px; background: var
 .type-foot { margin-top: 8px; }
 
 /* --- prerender loading screen --- */
-#hqDlg { background: rgba(0, 0, 0, .3); }
+/* opaque, so the keyframes render out of sight and don't spoil the journey */
+#hqDlg { background: #000 repeating-conic-gradient(#000018 0 25%, #000 0 50%) 0 0 / 4px 4px; }
 .hq-box { max-width: 620px; }
 .hq-name { color: var(--white); font-size: 26px; text-align: center; margin-bottom: 10px; letter-spacing: 2px; }
 .hq-row { display: flex; align-items: center; gap: 10px; margin: 6px 0; white-space: nowrap; }
