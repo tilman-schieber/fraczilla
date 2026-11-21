@@ -7,6 +7,7 @@ export const LOCATIONS = [
   { name: 'Spiral Coast', f: 'mandelbrot', x: '-0.0886', y: '0.6545', s: 0.006 },
   { name: 'Spiral Galaxy', f: 'mandelbrot', x: '-0.761574', y: '-0.0847596', s: 0.00009 },
   { name: 'Mini Mandelbrot', f: 'mandelbrot', x: '-1.7548776662466927', y: '0', s: 0.024 },
+  { name: 'Micro-Mandelbrot', f: 'mandelbrot', x: '-0.743641531', y: '0.131825100', s: 0.0000154824 },
   { name: 'Coral Reef', f: 'mandelbrot', x: '-1.768778833', y: '-0.001738996', s: 0.00000003 },
   { name: 'The Abyss (10^28)', f: 'mandelbrot', x: '-0.743643887037158704752191506114774', y: '0.131825904205311970493132056385139', s: 2e-28 },
   { name: 'The Burning Ship', f: 'burningship', x: '-1.7625', y: '-0.0300', s: 0.045 },
