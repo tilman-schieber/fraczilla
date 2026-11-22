@@ -2,9 +2,12 @@
 // jx/jy: a Julia highlight (x, y, s are then the view inside that Julia set).
 // pal/d: the palette and color density the spot is shown in (default Ultra, 0).
 // tour: false keeps a spot out of the lean-back tour (A).
+// k: coloring style, 1 stripes or 2 orbit trap (default classic).
 export const LOCATIONS = [
   { name: 'The Whole Set', f: 'mandelbrot', x: '-0.6', y: '0', s: 1.25 },
   { name: 'Seahorse Valley', f: 'mandelbrot', x: '-0.7453', y: '0.1127', s: 0.0035 },
+  { name: 'Silk Seahorses', f: 'mandelbrot', x: '-0.7453', y: '0.1127', s: 0.0035, k: 1 },
+  { name: 'Seahorse Lattice', f: 'mandelbrot', x: '-0.7453', y: '0.1127', s: 0.0035, k: 2 },
   { name: 'Double Spiral', f: 'mandelbrot', x: '-0.743643887037151', y: '0.131825904205330', s: 0.000012 },
   { name: 'Elephant Valley', f: 'mandelbrot', x: '0.2925755', y: '0.0149977', s: 0.0045, pal: 'Sunset' },
   { name: 'Spiral Coast', f: 'mandelbrot', x: '-0.0886', y: '0.6545', s: 0.006 },
@@ -71,6 +74,7 @@ export const LOCATIONS = [
   { name: 'Shattered Glass', f: 'barnsley1', x: '0.99248054', y: '-0.70423388', s: 0.0651 },
   { name: 'The Whole Sine', f: 'sine', x: '0', y: '0', s: 3.2 },
   { name: 'Sine Coast', f: 'sine', x: '0.43122115', y: '-0.90694439', s: 0.00536 },
+  { name: 'Sine Feathers', f: 'sine', x: '0.43122115', y: '-0.90694439', s: 0.00536, k: 1 },
   { name: 'Sine Minibrot', f: 'sine', x: '0.45104952', y: '-0.95493494', s: 0.000497549 },
   { name: 'Snowflake', f: 'sine', x: '-0.33709615', y: '-1.04209426', s: 0.0125823 },
   { name: 'Spiral Galaxies', f: 'sine', jx: '0.4510', jy: '-0.9549', x: '0', y: '0', s: 2.4, pal: 'Inferno' },
@@ -81,6 +85,7 @@ export const LOCATIONS = [
   { name: 'Phoenix Feathers', f: 'phoenix', x: '0.064', y: '0.41', s: 0.06 },
   { name: 'Phoenix Minibrot', f: 'phoenix', x: '-1.7997', y: '0', s: 0.011 },
   { name: 'Phoenix Bird', f: 'phoenix', jx: '0.5667', jy: '0', x: '0', y: '0', s: 1.05, pal: 'Lava' },
+  { name: 'Phoenix Ember', f: 'phoenix', jx: '0.5667', jy: '0', x: '0', y: '0', s: 1.05, pal: 'Lava', k: 2 },
   { name: 'The Whole Manowar', f: 'manowar', x: '-0.05', y: '0', s: 0.3 },
   { name: 'Little Jellyfish', f: 'manowar', x: '-0.294', y: '0', s: 0.02 },
   { name: 'The Whole Cosine', f: 'cosine', x: '1.5', y: '0', s: 2.4 },
@@ -99,7 +104,7 @@ export const LOCATIONS = [
 
 // Fraczilla opens on one of these at random (journey names).
 export const START = [
-  'Seahorse Valley', 'Elephant Valley', 'The Burning Ship', 'Little Buffalo', 'Minibrot in the Foam',
-  'Five-Arm Spiral', 'Zircon Towers', 'Sine Coast', 'Lambda Dragon', 'Phoenix Bird', 'Spiral Galaxies',
+  'Seahorse Valley', 'Silk Seahorses', 'Elephant Valley', 'The Burning Ship', 'Little Buffalo', 'Minibrot in the Foam',
+  'Five-Arm Spiral', 'Zircon Towers', 'Sine Coast', 'Lambda Dragon', 'Phoenix Bird', 'Phoenix Ember', 'Sine Feathers', 'Spiral Galaxies',
   'Ice Crystal', 'Triskelion', 'Snowflake',
 ];

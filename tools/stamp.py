@@ -13,7 +13,7 @@ import pathlib
 import re
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
-FILES = [ROOT / "index.html", *sorted((ROOT / "js").glob("*.js")), ROOT / "css" / "style.css"]
+FILES = [ROOT / "index.html", *sorted((ROOT / "js").glob("*.js")), ROOT / "css" / "style.css", ROOT / "sw.js"]
 REF = re.compile(r"""(['"])((?:\./|js/|css/)[\w./-]+?\.(?:js|css))(?:\?v=\w+)?\1""")
 
 

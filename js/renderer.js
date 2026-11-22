@@ -15,7 +15,28 @@ uniform int uLenA, uOffB, uLenB, uMaxIter, uJulia;
 uniform vec2 uRefOff, uRes;
 uniform float uPix, uYSign, uBail2, uLogBail, uLogDeg;
 uniform vec2 uC, uCrit; // lambda: the reference c (or Julia λ); critical point of the formula
+uniform int uColorMode;
 out vec4 o;
+// coloring styles (uColorMode): 0 escape time, 1 stripe average, 2 orbit trap (cross)
+#define STRIPE 5.0
+float gS = 0.0, gL = 0.0, gTrap = 1e9; int gN = 0;
+void acc(vec2 z) {
+  if (uColorMode == 1) { gL = 0.5 + 0.5*sin(STRIPE*atan(z.y, z.x)); gS += gL; gN++; }
+  else if (uColorMode == 2) gTrap = min(gTrap, min(abs(z.x), abs(z.y)));
+}
+// the value the color pass uses in .w: stripe average (smoothly blended by the
+// fractional escape count) or the closest approach to the trap
+float colorVal(float mu) {
+  if (uColorMode == 1) {
+    if (gN < 2) return 0.5;
+    float a = gS / float(gN), b = (gS - gL) / float(gN - 1);
+    return mix(b, a, fract(mu));
+  }
+  if (uColorMode == 2) return min(gTrap, 9.0);
+  return 0.0;
+}
+vec4 escO(float mu) { return vec4(mu, 0.0, 0.0, colorVal(mu)); }
+
 vec2 gDc = vec2(0.0);   // lambda: this pixel's offset in c
 
 vec2 orb(int i) { return texelFetch(uOrbit, ivec2(i & 2047, i >> 11), 0).xy; }
@@ -106,6 +127,7 @@ void main() {
     m++;
     z = orb(off + m) + dz;
     r2 = dot(z, z);
+    acc(z);
     if (r2 > uBail2) { esc = true; break; }
     // Zhuoran's rebasing: hop to the critical orbit when we get closer to it
     if (m >= len - 1 || amax(z - uCrit) < amax(dz)) { dz = z - uCrit; m = 0; off = uOffB; len = uLenB; }
@@ -120,9 +142,10 @@ void main() {
 #if FORMULA != 1 && FORMULA != 3 && FORMULA < 8
     if (ok) { u = vec2(dot(z, der), z.y*der.x - z.x*der.y); u /= max(length(u), 1e-30); }
 #endif
-    o = vec4(max(mu, 0.0), de, u);
+    // the light normal is stored as an angle (+4, so 0 means none), leaving .w for the coloring style
+    o = vec4(max(mu, 0.0), de, dot(u, u) > 0.25 ? atan(u.y, u.x) + 4.0 : 0.0, colorVal(mu));
   } else {
-    o = vec4(-1.0, r2, 0.0, 0.0);
+    o = vec4(-1.0, r2, 0.0, uColorMode == 2 ? min(gTrap, 9.0) : 0.0);
   }
 }`;
 
@@ -134,9 +157,28 @@ precision highp float; precision highp int;
 #define FORMULA ${formula}
 uniform vec2 uRes, uCenter, uCenterLo, uJC;
 uniform float uPix, uYSign, uBail2;
-uniform int uMaxIter, uJulia, uSeq, uSeqLen;
+uniform int uMaxIter, uJulia, uSeq, uSeqLen, uColorMode;
 out vec4 o;
 const float PI = 3.14159265358979;
+// coloring styles (uColorMode): 0 escape time, 1 stripe average, 2 orbit trap (cross)
+#define STRIPE 5.0
+float gS = 0.0, gL = 0.0, gTrap = 1e9; int gN = 0;
+void acc(vec2 z) {
+  if (uColorMode == 1) { gL = 0.5 + 0.5*sin(STRIPE*atan(z.y, z.x)); gS += gL; gN++; }
+  else if (uColorMode == 2) gTrap = min(gTrap, min(abs(z.x), abs(z.y)));
+}
+// the value the color pass uses in .w: stripe average (smoothly blended by the
+// fractional escape count) or the closest approach to the trap
+float colorVal(float mu) {
+  if (uColorMode == 1) {
+    if (gN < 2) return 0.5;
+    float a = gS / float(gN), b = (gS - gL) / float(gN - 1);
+    return mix(b, a, fract(mu));
+  }
+  if (uColorMode == 2) return min(gTrap, 9.0);
+  return 0.0;
+}
+vec4 escO(float mu) { return vec4(mu, 0.0, 0.0, colorVal(mu)); }
 vec2 cmul(vec2 a, vec2 b) { return vec2(a.x*b.x - a.y*b.y, a.x*b.y + a.y*b.x); }
 vec2 cdiv(vec2 a, vec2 b) { return vec2(a.x*b.x + a.y*b.y, a.y*b.x - a.x*b.y) / dot(b, b); }
 vec2 csin(vec2 z) { return vec2(sin(z.x)*cosh(z.y), cos(z.x)*sinh(z.y)); }
@@ -205,21 +247,24 @@ void main() {
   for (int i = 0; i < uMaxIter; i++) {
     z = cmul(z, z) + c;
     c = 0.5*c + z;
-    if (dot(z, z) > uBail2) { o = vec4(esc(i, z, 2.0), 0.0, 0.0, 0.0); return; }
+    acc(z);
+    if (dot(z, z) > uBail2) { o = escO(esc(i, z, 2.0)); return; }
   }
 #elif FORMULA == 105
   // Barnsley M1: (z -+ 1)·c depending on the sign of Re z
   vec2 c = julia ? uJC : pt, z = pt;
   for (int i = 0; i < uMaxIter; i++) {
     z = cmul(z.x >= 0.0 ? z - ONE : z + ONE, c);
-    if (dot(z, z) > uBail2) { o = vec4(esc(i, z, 2.0), 0.0, 0.0, 0.0); return; }
+    acc(z);
+    if (dot(z, z) > uBail2) { o = escO(esc(i, z, 2.0)); return; }
   }
 #elif FORMULA == 106
   // c·sin(z) from the critical point pi/2; escapes when |Im z| gets large
   vec2 c = julia ? uJC : pt, z = julia ? pt : vec2(PI/2.0, 0.0);
   for (int i = 0; i < uMaxIter; i++) {
     z = cmul(c, csin(z));
-    if (abs(z.y) > 50.0) { o = vec4(float(i) + 1.0 - clamp(log2(abs(z.y) / 50.0) / 5.0, 0.0, 1.0), 0.0, 0.0, 0.0); return; }
+    acc(z);
+    if (abs(z.y) > 50.0) { o = escO(float(i) + 1.0 - clamp(log2(abs(z.y) / 50.0) / 5.0, 0.0, 1.0)); return; }
   }
 #elif FORMULA == 109
   // Phoenix: z' = z^2 + c + p·z_prev with p = -0.5 (Julia mode: the classic Phoenix at c = 0.5667)
@@ -228,7 +273,8 @@ void main() {
   for (int i = 0; i < uMaxIter; i++) {
     vec2 nz = cmul(z, z) + c - 0.5*zp;
     zp = z; z = nz;
-    if (dot(z, z) > uBail2) { o = vec4(esc(i, z, 2.0), 0.0, 0.0, 0.0); return; }
+    acc(z);
+    if (dot(z, z) > uBail2) { o = escO(esc(i, z, 2.0)); return; }
   }
 #elif FORMULA == 110
   // Manowar: z' = z^2 + z_prev + c, starting from z = z_prev = 0
@@ -236,7 +282,8 @@ void main() {
   for (int i = 0; i < uMaxIter; i++) {
     vec2 nz = cmul(z, z) + zp + c;
     zp = z; z = nz;
-    if (dot(z, z) > uBail2) { o = vec4(esc(i, z, 2.0), 0.0, 0.0, 0.0); return; }
+    acc(z);
+    if (dot(z, z) > uBail2) { o = escO(esc(i, z, 2.0)); return; }
   }
 #elif FORMULA == 111
   // Halley's method for z^5 - 1: z -= 2ff' / (2f'^2 - ff''); five basins
@@ -258,14 +305,16 @@ void main() {
   vec2 c = julia ? uJC : pt, z = julia ? pt : vec2(0.0);
   for (int i = 0; i < uMaxIter; i++) {
     z = ccos(z) + c;
-    if (abs(z.y) > 50.0) { o = vec4(float(i) + 1.0 - clamp(log2(abs(z.y) / 50.0) / 5.0, 0.0, 1.0), 0.0, 0.0, 0.0); return; }
+    acc(z);
+    if (abs(z.y) > 50.0) { o = escO(float(i) + 1.0 - clamp(log2(abs(z.y) / 50.0) / 5.0, 0.0, 1.0)); return; }
   }
 #elif FORMULA == 113
   // c·exp(z) from the asymptotic value 0; escapes when Re z gets large
   vec2 c = julia ? uJC : pt, z = julia ? pt : vec2(0.0);
   for (int i = 0; i < uMaxIter; i++) {
     z = cmul(c, cexp(z));
-    if (z.x > 50.0) { o = vec4(float(i) + 1.0 - clamp(log2(z.x / 50.0) / 5.0, 0.0, 1.0), 0.0, 0.0, 0.0); return; }
+    acc(z);
+    if (z.x > 50.0) { o = escO(float(i) + 1.0 - clamp(log2(z.x / 50.0) / 5.0, 0.0, 1.0)); return; }
   }
 #elif FORMULA == 107
   // Lyapunov exponent of the logistic map, forcing sequence of a (bit 0) and b (bit 1)
@@ -293,6 +342,7 @@ void main() {
   }
   o = vec4((n + 0.5) * 384.0, 0.0, 0.0, 0.0);
 #endif
+  if (o.x < 0.0 && uColorMode == 2) o.w = min(gTrap, 9.0);
 }`;
 
 // Double-float version of the float formulas: every coordinate is an unevaluated sum
@@ -304,9 +354,29 @@ precision highp float; precision highp int;
 #define FORMULA ${formula}
 uniform vec2 uRes, uCenter, uCenterLo, uJC;
 uniform float uPix, uYSign, uBail2, uOne;
-uniform int uMaxIter, uJulia, uSeq, uSeqLen;
+uniform int uMaxIter, uJulia, uSeq, uSeqLen, uColorMode;
 out vec4 o;
 const float PI = 3.14159265358979;
+// coloring styles (uColorMode): 0 escape time, 1 stripe average, 2 orbit trap (cross)
+#define STRIPE 5.0
+float gS = 0.0, gL = 0.0, gTrap = 1e9; int gN = 0;
+void acc(vec2 z) {
+  if (uColorMode == 1) { gL = 0.5 + 0.5*sin(STRIPE*atan(z.y, z.x)); gS += gL; gN++; }
+  else if (uColorMode == 2) gTrap = min(gTrap, min(abs(z.x), abs(z.y)));
+}
+// the value the color pass uses in .w: stripe average (smoothly blended by the
+// fractional escape count) or the closest approach to the trap
+float colorVal(float mu) {
+  if (uColorMode == 1) {
+    if (gN < 2) return 0.5;
+    float a = gS / float(gN), b = (gS - gL) / float(gN - 1);
+    return mix(b, a, fract(mu));
+  }
+  if (uColorMode == 2) return min(gTrap, 9.0);
+  return 0.0;
+}
+vec4 escO(float mu) { return vec4(mu, 0.0, 0.0, colorVal(mu)); }
+
 // --- double-float arithmetic. Each rounded result is multiplied by uOne (1.0, unknown at
 // compile time), or the compiler simplifies (a + b) - a to b and the error terms vanish.
 vec2 two(float a, float b) {
@@ -459,7 +529,8 @@ void main() {
     zp = z; z = nz;
 #endif
     vec2 h = hi(z);
-    if (dot(h, h) > uBail2) { o = vec4(esc(i, h, 2.0), 0.0, 0.0, 0.0); return; }
+    acc(h);
+    if (dot(h, h) > uBail2) { o = escO(esc(i, h, 2.0)); return; }
   }
 #elif FORMULA == 106 || FORMULA == 112
   vec4 c = julia ? jc : pt;
@@ -474,13 +545,15 @@ void main() {
 #else
     z = cadd(ccos(z), c);
 #endif
-    if (abs(z.z) > 50.0) { o = vec4(escIm(i, abs(z.z)), 0.0, 0.0, 0.0); return; }
+    acc(hi(z));
+    if (abs(z.z) > 50.0) { o = escO(escIm(i, abs(z.z))); return; }
   }
 #elif FORMULA == 113
   vec4 c = julia ? jc : pt, z = julia ? pt : vec4(0.0);
   for (int i = 0; i < uMaxIter; i++) {
     z = cmul(c, cexp(z));
-    if (z.x > 50.0) { o = vec4(escIm(i, z.x), 0.0, 0.0, 0.0); return; }
+    acc(hi(z));
+    if (z.x > 50.0) { o = escO(escIm(i, z.x)); return; }
   }
 #elif FORMULA == 107
   vec2 a = pt.xy, b = pt.zw;
@@ -499,6 +572,7 @@ void main() {
   if (lambda < 0.0) o = vec4(-lambda * 60.0, 0.0, 0.0, 0.0);
   else o = vec4(-1.0, lambda, 0.0, 0.0);
 #endif
+  if (o.x < 0.0 && uColorMode == 2) o.w = min(gTrap, 9.0);
 }`;
 
 const COLOR_FS = `#version 300 es
@@ -506,7 +580,7 @@ precision highp float; precision highp int; precision highp sampler2D;
 uniform sampler2D uLow, uFull, uPal;
 uniform vec2 uLowRes, uFullRes, uOut;
 uniform float uDoneY, uDensity, uOffset, uLightStr, uEdge;
-uniform int uHaveFull, uMapping, uSmooth, uLight, uInside;
+uniform int uHaveFull, uMapping, uSmooth, uLight, uInside, uColorMode;
 uniform vec2 uLightDir;
 uniform vec3 uInsideColor;
 out vec4 o;
@@ -515,22 +589,28 @@ vec3 pal(float idx) {
   if (uSmooth == 1) return texture(uPal, vec2(idx / 256.0, 0.5)).rgb;
   return texture(uPal, vec2((floor(mod(idx, 256.0)) + 0.5) / 256.0, 0.5)).rgb;
 }
+float trapIdx(float t) { return -log(max(t, 1e-6)) * 28.0; }
 vec3 shade(vec4 d) {
   if (d.x < 0.0) {
+    if (uColorMode == 2) return pal(trapIdx(d.w) * uDensity + uOffset) * 0.8; // orbit traps light up the inside too
     if (uInside == 0) return uInsideColor;
     return pal(sqrt(d.y) * 96.0 * uDensity + uOffset) * 0.85;
   }
   float n = uSmooth == 1 ? d.x : floor(d.x);
   float f = uMapping == 0 ? n : (uMapping == 1 ? sqrt(n) * 16.0 : log2(1.0 + n) * 32.0);
-  if (d.w >= 9.5) { // root basins: each root gets its own third of the palette, iterations shade within it
+  if (uColorMode == 0 && d.w >= 9.5) { // root basins: each root gets its own third of the palette, iterations shade within it
     float root = d.w - 10.0;
     vec3 b = pal(root * 85.333 + uOffset + f * uDensity * 0.35);
     return b * (0.35 + 0.65 * exp(-0.08 * n));
   }
-  vec3 c = pal(f * uDensity + uOffset);
-  if (uLight == 1 && d.z * d.z + d.w * d.w > 0.25) {
+  float idx = f;
+  if (uColorMode == 1) idx = d.w * 560.0 + f * 0.25;      // stripes (averages sit near 0.5, so stretch), drifting slowly with depth
+  else if (uColorMode == 2) idx = trapIdx(d.w);
+  vec3 c = pal(idx * uDensity + uOffset);
+  if (uLight == 1 && d.z > 0.5) {
     float h = 1.25;
-    float t = clamp((dot(d.zw, uLightDir) + h) / (1.0 + h), 0.0, 1.0);
+    vec2 nrm = vec2(cos(d.z - 4.0), sin(d.z - 4.0));
+    float t = clamp((dot(nrm, uLightDir) + h) / (1.0 + h), 0.0, 1.0);
     float spec = pow(t, 24.0) * 0.35;
     c = mix(c, c * (0.25 + 1.0 * t) + spec, uLightStr);
   }
@@ -566,6 +646,14 @@ void main() {
   o = vec4(c, 1.0);
 }`;
 
+// Crossfade: the last frame of the old picture, laid over the new one with fading alpha.
+const FADE_FS = `#version 300 es
+precision highp float;
+uniform sampler2D uTex;
+uniform float uA;
+out vec4 o;
+void main() { o = vec4(texelFetch(uTex, ivec2(gl_FragCoord.xy), 0).rgb, uA); }`;
+
 export const PROBE_MAXW = 192, PROBE_H = 64;
 
 export class Renderer {
@@ -581,6 +669,7 @@ export class Renderer {
     this.vao = gl.createVertexArray();
     this.progs = {};
     this.colorProg = this.link(VS, COLOR_FS);
+    this.fadeProg = this.link(VS, FADE_FS);
 
     this.orbitTex = this.makeTex(gl.NEAREST);
     this.thumbOrbitTex = this.makeTex(gl.NEAREST);
@@ -706,6 +795,7 @@ export class Renderer {
     gl.uniform2f(u('uJC'), P.jcX || 0, P.jcY || 0);
     gl.uniform1i(u('uSeq'), P.seq || 0);
     gl.uniform1i(u('uSeqLen'), P.seqLen || 1);
+    gl.uniform1i(u('uColorMode'), P.colorMode || 0);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.disable(gl.SCISSOR_TEST);
   }
@@ -745,6 +835,7 @@ export class Renderer {
     gl.uniform1f(u('uLightStr'), C.lightStr);
     gl.uniform1f(u('uEdge'), C.edge);
     gl.uniform1i(u('uInside'), C.inside);
+    gl.uniform1i(u('uColorMode'), C.colorMode || 0);
     gl.uniform3fv(u('uInsideColor'), C.insideColor);
     gl.drawArrays(gl.TRIANGLES, 0, 3);
   }
@@ -771,6 +862,38 @@ export class Renderer {
     const img = new ImageData(w, h), row = w * 4;
     for (let y = 0; y < h; y++) img.data.set(px.subarray((h - 1 - y) * row, (h - y) * row), y * row);
     return img;
+  }
+
+  // Keep the picture now on screen (composited from the current data targets) for a crossfade.
+  snapshot(C) {
+    const gl = this.gl, w = this.canvas.width, h = this.canvas.height;
+    if (!this.fadeT) this.fadeT = { tex: this.makeTex(gl.NEAREST), fbo: gl.createFramebuffer(), w: 0, h: 0 };
+    const t = this.fadeT;
+    if (t.w !== w || t.h !== h) {
+      gl.bindTexture(gl.TEXTURE_2D, t.tex);
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA8, w, h, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+      gl.bindFramebuffer(gl.FRAMEBUFFER, t.fbo);
+      gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, t.tex, 0);
+      t.w = w; t.h = h;
+    }
+    this.composite(C, t);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  }
+  // Lay the snapshot over the canvas with opacity a (false if there is none at this size).
+  drawFade(a) {
+    const gl = this.gl, t = this.fadeT;
+    if (!t || t.w !== this.canvas.width || t.h !== this.canvas.height) return false;
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    gl.viewport(0, 0, t.w, t.h);
+    gl.useProgram(this.fadeProg);
+    gl.bindVertexArray(this.vao);
+    gl.activeTexture(gl.TEXTURE0); gl.bindTexture(gl.TEXTURE_2D, t.tex);
+    gl.uniform1i(this.fadeProg.u('uTex'), 0);
+    gl.uniform1f(this.fadeProg.u('uA'), a);
+    gl.enable(gl.BLEND); gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawArrays(gl.TRIANGLES, 0, 3);
+    gl.disable(gl.BLEND);
+    return true;
   }
 
   // Render a small fully colored picture offscreen and return it as ImageData.

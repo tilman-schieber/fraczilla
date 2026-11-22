@@ -1,10 +1,10 @@
-import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=11898f0f';
-import { PALETTES, randomPalette } from './palettes.js?v=11898f0f';
-import { LOCATIONS, START } from './locations.js?v=11898f0f';
-import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=11898f0f';
-import { FRACTALS, FAMILIES } from './fractals.js?v=11898f0f';
-import { muxWebM } from './webm.js?v=11898f0f';
-import { asciiLogoSVG } from './logo.js?v=11898f0f';
+import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=4f69fb34';
+import { PALETTES, randomPalette } from './palettes.js?v=4f69fb34';
+import { LOCATIONS, START } from './locations.js?v=4f69fb34';
+import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=4f69fb34';
+import { FRACTALS, FAMILIES } from './fractals.js?v=4f69fb34';
+import { muxWebM } from './webm.js?v=4f69fb34';
+import { asciiLogoSVG } from './logo.js?v=4f69fb34';
 
 const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
@@ -37,6 +37,7 @@ const S = {
   pal: 0, palData: PALETTES[0].data,
   density: 0, offset: 0, cycling: false, cycleSpeed: 30,
   mapping: 1, smooth: true, light: true, lightAngle: 45, lightStr: 0.55, edge: 0, inside: 0,
+  colorMode: 0, // STYLE: 0 classic escape time, 1 stripes, 2 orbit trap
   aa: true, hq: false, flySpeed: 1.4,
 };
 let retroSaved = null;
@@ -62,7 +63,7 @@ function maxIter() {
 let worker, ref = null, pend = null, reqId = 0;
 function startWorker() {
   if (worker) worker.terminate();
-  worker = new Worker(new URL('./refworker.js?v=11898f0f', import.meta.url));
+  worker = new Worker(new URL('./refworker.js?v=4f69fb34', import.meta.url));
   worker.onmessage = (e) => {
     const m = e.data;
     if (!pend || m.id !== pend.id) return;
@@ -172,8 +173,58 @@ function resize() {
 }
 new ResizeObserver(resize).observe(canvas);
 
+const compositeArgs = () => ({
+  ...colorParams(),
+  lowW, lowH, haveFull: fullVer === lowVer && fullDone > 0,
+  doneY: Math.ceil((R.full.h - fullDone) / aaFactor),
+});
+// Crossfade: call right before a cut (another type, Julia set or overview); the
+// picture on screen then fades out over the new one instead of vanishing at once.
+const FADE_MS = 650;
+const fade = { t: 1, t0: 0 };
+function crossfade() {
+  if (!haveLow || hq || outOverride) return;
+  R.snapshot(compositeArgs());
+  fade.t = 0; fade.t0 = performance.now();
+}
+
+// Browser history: every jump (journey, saved view, Julia switch, type, reset) gets
+// its own entry, so Back and Forward step through them. Zooming and panning only
+// update the current entry (writeHash).
+let histMute = false;
+function pushHistory() {
+  if (histMute || hq) return;
+  writeHash();
+  history.pushState(null, '', location.hash);
+}
+addEventListener('popstate', () => {
+  const p = new URLSearchParams(location.hash.slice(1));
+  if (!p.has('f')) return;
+  const l = p.get('l') || '11';
+  const fv = cleanFav({
+    name: 'that view', f: p.get('f'), x: p.get('x'), y: p.get('y'), s: +p.get('s'),
+    jx: p.get('jx') ?? undefined, jy: p.get('jy') ?? undefined,
+    pal: PALETTES[+p.get('p')]?.name, d: +p.get('d') || 0, o: +p.get('o') || 0, m: +p.get('m'),
+    light: l[0] === '1', smooth: l[1] !== '0', k: +p.get('k') || 0, i: p.has('i') ? +p.get('i') : undefined,
+  });
+  if (!fv) return;
+  if (fv.pal == null && S.pal < 0) fv.pd = b64(S.palData); // a random palette never was in the link: keep it
+  stopTour(); histMute = true;
+  try { goLocation(favLoc(fv)); } finally { histMute = false; }
+});
+
+// STYLE needs an escaping orbit: not for root finders, Magnet, Lyapunov or Plasma
+const STYLE_OFF = new Set([100, 101, 102, 103, 107, 108, 111]);
+const STYLES = ['CLASSIC', 'STRIPES', 'ORBIT TRAP'];
+const styleOf = (f = S.f, mode = S.colorMode) => (STYLE_OFF.has(f.code) ? 0 : mode);
+function setStyle(k) {
+  if (S.colorMode === k) return;
+  S.colorMode = k;
+  invalidate(false); colorDirty = true; syncUI();
+}
 function colorParams() {
   return {
+    colorMode: styleOf(),
     density: Math.pow(2, S.density), offset: S.offset, mapping: S.mapping, smooth: S.smooth,
     light: S.light, lightAngle: S.lightAngle, lightStr: S.lightStr, edge: S.edge,
     inside: S.inside, insideColor: [0, 0, 0],
@@ -195,6 +246,7 @@ function fractalParams() {
     // float path
     centerX: toDouble(S.cx), centerY: toDouble(S.cy), jcX: toDouble(S.jx), jcY: toDouble(S.jy),
     seq: seqBits(S.f.seq), seqLen: (S.f.seq || 'A').length,
+    colorMode: styleOf(),
   };
 }
 
@@ -254,13 +306,14 @@ function frame(now) {
       analyzeProbe(P);
     }
   }
+  if (fade.t < 1) {
+    fade.t = Math.min(1, (now - fade.t0) / FADE_MS);
+    colorDirty = true;
+  }
   if (colorDirty && haveLow) {
-    R.composite({
-      ...colorParams(),
-      lowW, lowH, haveFull: fullVer === lowVer && fullDone > 0,
-      doneY: Math.ceil((R.full.h - fullDone) / aaFactor),
-    });
+    R.composite(compositeArgs());
     colorDirty = false;
+    if (fade.t < 1 && !R.drawFade(1 - fade.t * fade.t * (3 - 2 * fade.t))) fade.t = 1;
   }
   if (now - lastStatus > 120) { lastStatus = now; updateStatus(refOk); }
   if (!animating() && now - lastMove > 600 && lastHashVer !== viewVer && now - lastHashT > 500) {
@@ -417,6 +470,7 @@ function cleanFav(o) {
   if (Number.isFinite(o.d)) out.d = Math.max(-4, Math.min(4, o.d));
   if (Number.isFinite(o.o)) out.o = Math.max(0, Math.min(256, o.o));
   if ([0, 1, 2].includes(o.m)) out.m = o.m;
+  if ([1, 2].includes(o.k)) out.k = o.k;
   if (typeof o.light === 'boolean') out.light = o.light;
   if (typeof o.smooth === 'boolean') out.smooth = o.smooth;
   if (Number.isFinite(o.i) && o.i >= 50 && o.i <= 200000) out.i = Math.round(o.i);
@@ -445,6 +499,7 @@ function captureView() {
   if (S.julia) { o.jx = formatFixed(S.jx, 24); o.jy = formatFixed(S.jy, 24); }
   if (S.pal >= 0) o.pal = PALETTES[S.pal].name; else o.pd = b64(S.palData);
   o.d = +S.density.toFixed(2); o.o = +S.offset.toFixed(1); o.m = S.mapping; o.light = S.light; o.smooth = S.smooth;
+  if (S.colorMode) o.k = S.colorMode;
   if (!S.iterAuto) o.i = S.iterManual;
   return o;
 }
@@ -509,6 +564,7 @@ function favUrl(fv) {
   if (fv.d != null) p.set('d', fv.d); if (fv.o != null) p.set('o', fv.o); if (fv.m != null) p.set('m', fv.m);
   p.set('l', (fv.light === false ? 0 : 1) + '' + (fv.smooth === false ? 0 : 1));
   if (fv.i) p.set('i', fv.i);
+  if (fv.k) p.set('k', fv.k);
   return `${location.href.split('#')[0]}#${p}`;
 }
 function deleteFav(i) {
@@ -630,7 +686,7 @@ function bindFavs() {
 // waits for the full-quality render, holds, and moves on. Any navigation stops it.
 const TOUR_HOLD = 6000, TOUR_MAX_WAIT = 25000;
 // keys that only change the look keep the tour running
-const TOUR_KEEPS = new Set(['a', 'A', 'Tab', 'h', 'H', 'F1', '?', 'c', 'C', '+', '=', '-', '_', 'p', 'P', '[', ']', 'b', 'B', 'd', 'D', 'r', 'R', 'j', 'J', 'l', 'L', 'Shift']);
+const TOUR_KEEPS = new Set(['z', 'Z', 'a', 'A', 'Tab', 'h', 'H', 'F1', '?', 'c', 'C', '+', '=', '-', '_', 'p', 'P', '[', ']', 'b', 'B', 'd', 'D', 'r', 'R', 'j', 'J', 'l', 'L', 'Shift']);
 const tour = { on: false, list: [], next: null, phase: 'idle', t0: 0, settledAt: 0, saved: null };
 const shuffle = (a) => { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; };
 // up to two spots per type, types in random order (never the type we are on first)
@@ -656,7 +712,7 @@ function startTour(mine = jTab === 'mine') {
   hideSplash(); closeRender(); $('#help').classList.add('hidden');
   tour.on = true; tour.list = tourPlaylist();
   tour.saved = { cycling: S.cycling, panelClosed: $('#panel').classList.contains('closed') };
-  S.cycling = true;
+  if (!reduceMotion.matches) S.cycling = true; // the system asked for less motion: hold the colors still
   $('#panel').classList.add('closed');
   toast(mine ? 'TOUR OF YOUR SAVED VIEWS: any zoom, drag or key ends it' : 'TOUR: sit back. Any zoom, drag or key ends it');
   tourAdvance();
@@ -756,6 +812,7 @@ function applyLook(loc) {
   if (loc.m != null) S.mapping = loc.m;
   if (loc.light != null) S.light = loc.light;
   if (loc.smooth != null) S.smooth = loc.smooth;
+  setStyle(loc.k || 0); // curated spots are classic unless they say otherwise
   colorDirty = true; syncUI();
 }
 // crossfade palette and density over ~0.8 s
@@ -774,7 +831,7 @@ function stepLook(dt) {
 function toggleJulia(px, py) {
   stopTour();
   if (S.f.julia === false && !S.julia) { toast(`${S.f.name} HAS NO JULIA MODE`); return; }
-  stopMotion();
+  stopMotion(); pushHistory(); crossfade();
   if (!S.julia) {
     const [ox, oy] = px != null ? screenOffset(px, py) : [0, 0];
     S.jx = S.cx + fromDouble(ox); S.jy = S.cy + fromDouble(oy);
@@ -801,11 +858,13 @@ let locIdx = 0;
 // Fly to a journey destination (or prerender the flight as a video when render is set).
 function goLocation(loc, render = false, fromTour = false) {
   if (!fromTour) stopTour();
+  if (!render && !fromTour) pushHistory();
   const go = (t) => (render ? prerenderJourney(t) : fromTour ? flyTo(t.cx, t.cy, t.s) : startJourney(t));
   if (loc.inJulia) { go({ name: loc.name, cx: loc.cx, cy: loc.cy, s: loc.s }); return; }
   const f = FORMULAS.find((q) => q.id === loc.f) || FORMULAS[0];
   if (loc.jx != null) {
     // a Julia highlight: show its whole Julia set, then fly in
+    if (!render && (f !== S.f || !S.julia || S.jx !== parseFixed(loc.jx) || S.jy !== parseFixed(loc.jy))) crossfade();
     if (f !== S.f) setFormula(f);
     if (!S.julia || S.jx !== parseFixed(loc.jx) || S.jy !== parseFixed(loc.jy)) {
       stopMotion(); iterFloor = 0;
@@ -813,6 +872,7 @@ function goLocation(loc, render = false, fromTour = false) {
       invalidate(false); syncUI();
     }
   } else if (f !== S.f || S.julia) {
+    if (!render) crossfade();
     setFormula(f, true);
     setHome();
   }
@@ -825,7 +885,7 @@ function goLocation(loc, render = false, fromTour = false) {
 function startJourney(t) {
   if (S.hq) { prerenderJourney(t); return; }
   flyTo(t.cx, t.cy, t.s);
-  toast(`FLYING TO ${t.name.toUpperCase()}`);
+  toast(histMute ? 'BACK TO THAT VIEW' : `FLYING TO ${t.name.toUpperCase()}`);
 }
 
 const homeScale = () => (S.julia ? juliaHome().s : S.f.home[2]);
@@ -853,21 +913,22 @@ function setPalette(i, data) {
 
 function toggleRetro() {
   if (!retroSaved) {
-    retroSaved = { pal: S.pal, palData: S.palData, smooth: S.smooth, light: S.light, mapping: S.mapping, density: S.density, offset: S.offset, edge: S.edge };
-    setPalette(1);
+    retroSaved = { pal: S.pal, palData: S.palData, smooth: S.smooth, light: S.light, mapping: S.mapping, density: S.density, offset: S.offset, edge: S.edge, colorMode: S.colorMode };
+    setPalette(1); setStyle(0);
     Object.assign(S, { smooth: false, light: false, mapping: 0, density: 0, offset: 0, edge: 0 });
     toast('RETRO MODE: 256 VGA COLORS, ONE PER ITERATION');
   } else {
     const r = retroSaved; retroSaved = null;
     S.pal = r.pal; S.palData = r.palData; R.uploadPalette(S.palData);
     Object.assign(S, { smooth: r.smooth, light: r.light, mapping: r.mapping, density: r.density, offset: r.offset, edge: r.edge });
+    setStyle(r.colorMode);
     toast('MODERN MODE');
   }
   colorDirty = true; syncUI();
 }
 
 function resetView() {
-  stopTour(); stopMotion();
+  stopTour(); stopMotion(); pushHistory(); crossfade();
   if (S.julia) setHome(); else setHome();
   invalidate(false);
 }
@@ -882,6 +943,7 @@ function writeHash() {
   if (S.julia) { p.set('jx', formatFixed(S.jx, 24)); p.set('jy', formatFixed(S.jy, 24)); }
   if (S.pal >= 0) p.set('p', S.pal);
   p.set('d', S.density.toFixed(2)); p.set('o', S.offset.toFixed(1)); p.set('m', S.mapping);
+  if (S.colorMode) p.set('k', S.colorMode);
   p.set('l', (S.light ? 1 : 0) + '' + (S.smooth ? 1 : 0));
   if (!S.iterAuto) p.set('i', S.iterManual);
   history.replaceState(null, '', '#' + p.toString());
@@ -900,6 +962,7 @@ function readHash() {
     if (p.has('d')) S.density = +p.get('d') || 0;
     if (p.has('o')) S.offset = +p.get('o') || 0;
     if (p.has('m')) S.mapping = +p.get('m') || 0;
+    S.colorMode = [1, 2].includes(+p.get('k')) ? +p.get('k') : 0;
     if (p.has('l')) { const l = p.get('l'); S.light = l[0] === '1'; S.smooth = l[1] !== '0'; }
     if (p.has('i')) { S.iterAuto = false; S.iterManual = Math.max(50, +p.get('i') || 1000); }
     return true;
@@ -999,6 +1062,9 @@ window.addEventListener('keydown', (e) => {
       break;
     case 'a': case 'A': tour.on ? stopTour() : startTour(); break;
     case 'm': case 'M': openSaveFav(); break;
+    case 'g': case 'G':
+      if (STYLE_OFF.has(S.f.code)) { toast(`${S.f.name} HAS ONLY THE CLASSIC STYLE`); break; }
+      setStyle((S.colorMode + 1) % 3); toast(`STYLE: ${STYLES[S.colorMode]}`); break;
     case 't': case 'T': { const js = currentJourneys(); goLocation(js[(locIdx = (locIdx + 1) % js.length)]); } break;
     case 'c': case 'C': S.cycling = !S.cycling; if (tour.on) tour.saved.cycling = S.cycling; toast(S.cycling ? 'COLOR CYCLING ON (+/− speed)' : 'COLOR CYCLING OFF'); syncUI(); break;
     case '+': case '=': S.cycleSpeed = Math.min(120, S.cycleSpeed + 10); S.cycling = true; toast(`CYCLE SPEED ${S.cycleSpeed}`); syncUI(); break;
@@ -1016,6 +1082,7 @@ window.addEventListener('keydown', (e) => {
     case 's': case 'S': if (!hq) renderImage(); break; // at the render panel's size (WINDOW by default)
     case 'v': case 'V': renderOpen() ? closeRender() : openRender(); break;
     case 'l': case 'L': copyLink(); break;
+    case 'z': case 'Z': toggleFullscreen(); break;
     case 'Home': resetView(); break;
     case 'Tab': $('#panel').classList.toggle('closed'); break;
     case 'h': case 'H': case 'F1': case '?': $('#help').classList.toggle('hidden'); break;
@@ -1031,6 +1098,13 @@ window.addEventListener('keydown', (e) => {
   handled();
 });
 
+const coarse = () => matchMedia('(pointer: coarse)').matches;
+const reduceMotion = matchMedia('(prefers-reduced-motion: reduce)');
+function toggleFullscreen() {
+  if (!document.fullscreenEnabled) { toast('FULLSCREEN IS NOT AVAILABLE IN THIS BROWSER'); return; }
+  if (document.fullscreenElement) document.exitFullscreen();
+  else document.documentElement.requestFullscreen().catch(() => toast('FULLSCREEN WAS REFUSED'));
+}
 async function copyLink() {
   writeHash();
   try { await navigator.clipboard.writeText(location.href); toast('LINK TO THIS VIEW COPIED'); }
@@ -1085,7 +1159,7 @@ function buildUI() {
   FORMULAS.filter((f) => f.quick).forEach((f) => {
     const b = document.createElement('button');
     b.className = 'btn'; b.textContent = f.name; b.dataset.id = f.id;
-    b.onclick = () => { setFormula(f); toast(f.name); };
+    b.onclick = () => { stopTour(); pushHistory(); crossfade(); setFormula(f); toast(f.name); phoneClosePanel(); };
     fwrap.appendChild(b);
   });
   const more = document.createElement('button');
@@ -1153,6 +1227,7 @@ function buildUI() {
   bindRange('edge', 'edge');
   bindRange('flySpeed', 'flySpeed');
   $('#mapping').onchange = (e) => { S.mapping = +e.target.value; colorDirty = true; };
+  $('#style').onchange = (e) => setStyle(+e.target.value);
   $('#inside').onchange = (e) => { S.inside = +e.target.value; colorDirty = true; };
   $('#smooth').onchange = (e) => { S.smooth = e.target.checked; colorDirty = true; };
   $('#light').onchange = (e) => { S.light = e.target.checked; colorDirty = true; };
@@ -1192,6 +1267,10 @@ function buildUI() {
     invalidate(false);
   });
   $('#linkBtn').onclick = copyLink;
+  $('#fsBtn').onclick = toggleFullscreen;
+  $('#fsBtn').classList.toggle('hidden', !document.fullscreenEnabled);
+  document.addEventListener('fullscreenchange', () => { $('#fsBtn').firstChild.textContent = document.fullscreenElement ? '⛶ EXIT FULL ' : '⛶ FULLSCREEN '; });
+  if (coarse()) $('.splash-hint').textContent = 'tap to start · pinch to zoom · MENU for everything';
   $('#resetBtn').onclick = resetView;
   $('#helpBtn').onclick = () => $('#help').classList.remove('hidden');
   $('#helpClose').onclick = () => $('#help').classList.add('hidden');
@@ -1238,11 +1317,11 @@ function journeyGroups() {
   if (!S.julia) return [{ title: S.f.name, items: plane }, { title: 'JULIA SETS', items: jul }];
   // in a curated Julia set, its own entry is "the whole Julia set"
   const isHere = (l) => parseFixed(l.jx) === S.jx && parseFixed(l.jy) === S.jy;
-  const own = jul.find(isHere);
-  const these = own ? [own, ...juliaJourneys().slice(1)] : juliaJourneys();
+  const own = jul.filter(isHere);
+  const these = own.length ? [...own, ...juliaJourneys().slice(1)] : juliaJourneys();
   return [
     { title: 'THIS JULIA SET', items: these },
-    { title: 'OTHER JULIA SETS', items: jul.filter((l) => l !== own) },
+    { title: 'OTHER JULIA SETS', items: jul.filter((l) => !isHere(l)) },
     { title: `BACK TO ${S.f.name}`, items: plane },
   ];
 }
@@ -1290,7 +1369,7 @@ function syncUI() {
   $('#jpvBtn').disabled = S.f.julia === false || S.julia;
   $('#jpvBtn').title = S.julia ? 'Julia preview works on the c-plane (SPACE goes back there)' : 'J: show the Julia set of the point under the mouse';
   const jc = $('#juliaC');
-  jc.textContent = S.julia ? `c = ${fmtC(S.jx, S.jy, 8)}  ✎` : (S.f.julia === false ? '' : matchMedia('(pointer: coarse)').matches ? 'MANDEL ⇄ JULIA opens the Julia set at the centre' : 'SPACE over any point opens its Julia set');
+  jc.textContent = S.julia ? `c = ${fmtC(S.jx, S.jy, 8)}  ✎` : (S.f.julia === false ? '' : coarse() ? 'MANDEL ⇄ JULIA opens the Julia set at the centre' : 'SPACE over any point opens its Julia set');
   jc.classList.toggle('editable', S.julia);
   jc.title = S.julia ? 'Click to type a different c' : '';
   if (!S.julia) $('#jcRow').classList.add('hidden');
@@ -1307,6 +1386,8 @@ function syncUI() {
   $('#density').value = S.density;
   $('#offset').value = S.offset;
   $('#mapping').value = S.mapping;
+  $('#style').value = styleOf();
+  $('#style').disabled = STYLE_OFF.has(S.f.code);
   $('#inside').value = S.inside;
   $('#smooth').checked = S.smooth;
   $('#light').checked = S.light;
@@ -1781,6 +1862,7 @@ function closeTypes() {
 }
 function pickType(f) {
   closeTypes(); phoneClosePanel();
+  pushHistory(); crossfade();
   setFormula(f);
   toast(f.name);
 }
@@ -1833,7 +1915,7 @@ function typeKeys(e) {
 }
 
 function thumbOrbit(f, maxIter) {
-  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=11898f0f', import.meta.url));
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=4f69fb34', import.meta.url));
   return new Promise((resolve) => {
     const id = Math.random();
     thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };
@@ -1851,7 +1933,7 @@ let picWorker = null;
 const picWait = new Map();
 function picOrbit(f, julia, cx, cy, jx, jy, F, maxIter) {
   if (!picWorker) {
-    picWorker = new Worker(new URL('./refworker.js?v=11898f0f', import.meta.url));
+    picWorker = new Worker(new URL('./refworker.js?v=4f69fb34', import.meta.url));
     picWorker.onmessage = (e) => { const r = picWait.get(e.data.id); if (r) { picWait.delete(e.data.id); r(e.data); } };
   }
   return new Promise((resolve) => {
@@ -1878,7 +1960,7 @@ async function picture(f, v, w, h, C = colorParams()) {
     degree: f.degree, orbitTex: R.thumbOrbitTex,
     cX: julia ? toDouble(jx) : toDouble(cx), cY: julia ? toDouble(jy) : toDouble(cy), crit: f.code === 7 ? 0.5 : 0,
     centerX: toDouble(cx), centerY: toDouble(cy), jcX: toDouble(jx), jcY: toDouble(jy),
-    seq: seqBits(f.seq), seqLen: (f.seq || 'A').length,
+    seq: seqBits(f.seq), seqLen: (f.seq || 'A').length, colorMode: C.colorMode = styleOf(f, C.colorMode ?? 0),
   }, C, w, h); } finally { if (C.palData) R.uploadPalette(S.palData); }
 }
 
@@ -1906,7 +1988,7 @@ function stepJuliaPreview() {
   if (x + W > right - 8) x = mouse.x - 28 - W;
   if (y + H > cssH - 8) y = mouse.y - 28 - H;
   jpv.el.style.transform = `translate(${Math.max(4, x)}px, ${Math.max(4, y)}px)`;
-  const key = `${S.f.id}|${mouse.x}|${mouse.y}|${viewVer}|${S.pal}|${pal.t}|${S.density.toFixed(2)}|${S.mapping}|${S.smooth}|${S.light}`;
+  const key = `${S.f.id}|${mouse.x}|${mouse.y}|${viewVer}|${S.pal}|${pal.t}|${S.density.toFixed(2)}|${S.mapping}|${S.smooth}|${S.light}|${S.colorMode}`;
   if (jpv.busy || key === jpv.key) return;
   jpv.busy = true; jpv.key = key;
   const [ox, oy] = screenOffset(mouse.x, mouse.y);
@@ -1929,7 +2011,7 @@ function lookFor(f) {
   const loc = (f.start && LOCATIONS.find((l) => l.name === f.start)) || LOCATIONS.find((l) => l.f === f.id);
   if (!loc) return null;
   const p = PALETTES.find((q) => q.name === (loc.pal || 'Ultra'));
-  return p && { data: p.data, d: loc.d ?? 0, smooth: !p.banded, o: loc.o };
+  return p && { data: p.data, d: loc.d ?? 0, smooth: !p.banded, o: loc.o, k: loc.k || 0 };
 }
 
 // Render each type's overview with the current palette, one per animation frame.
@@ -1948,6 +2030,7 @@ async function renderThumbs() {
       // color each card the way the type opens (applyLook), unless retro mode pins the palette
       const look = lookFor(f), C = colorParams();
       if (look) { C.density = Math.pow(2, look.d); C.smooth = look.smooth; C.palData = look.data; if (look.o != null) C.offset = look.o; }
+      C.colorMode = styleOf(f, look ? look.k : S.colorMode);
       if (!img && start) {
         // types that open on a Julia set show that picture, not the c-plane
         img = await picture(f, { x: start.x, y: start.y, s: start.s * 1.05, jx: start.jx, jy: start.jy, maxIter: 600 }, THUMB_W, THUMB_H, C);
@@ -1965,6 +2048,7 @@ async function renderThumbs() {
           maxIter, lenA: m.lenA, offB: m.offB, lenB: m.lenB, bail: f.deep ? BAIL : (f.code === 102 || f.code === 103 ? 100 : 256),
           degree: f.degree, orbitTex: R.thumbOrbitTex,
           cX: hx, cY: hy, crit: f.code === 7 ? 0.5 : 0, centerX: hx, centerY: hy, seq: seqBits(f.seq), seqLen: (f.seq || 'A').length,
+          colorMode: C.colorMode,
         }, C, THUMB_W, THUMB_H);
         if (C.palData) R.uploadPalette(S.palData);
         thumbCache.set(f.id, img);
@@ -2006,6 +2090,7 @@ if (flyLoc) {
   const pi = PALETTES.findIndex((p) => p.name === (loc.pal || 'Ultra'));
   if (pi >= 0) { S.pal = pi; S.palData = PALETTES[pi].data; S.smooth = !PALETTES[pi].banded; }
   S.density = loc.d ?? 0;
+  S.colorMode = loc.k || 0;
 }
 buildUI();
 R.uploadPalette(S.palData);

@@ -10,12 +10,14 @@ A GPU deep-zoom fractal explorer in the spirit of the classic DOS fractal progra
   - most have a Julia counterpart: press SPACE over any point, or click the shown c to type one. `J` turns on a live preview of the Julia set under the mouse
 - Journeys: smooth zoom-and-pan flights (van Wijk–Nuij) to curated spots, and a lean-back tour (`A`, or link `#tour=1`) that shows the best spots of every type one after another. Curated Julia sets (marked **J**) sit in the same list, and each spot carries its own palette. Phoenix and Lambda open on their famous Julia sets.
 - ★ MINE: save any view with `M`, colors included, give it a name, fly back to it, tour your own views, and export or import them as a `.json` file. Saved views stay in the browser's local storage.
-- Coloring is a separate pass: 15 palettes plus random ones, color cycling, smooth or banded coloring, 3D lighting, edge ink, and a retro VGA mode.
+- Coloring is a separate pass: 15 palettes plus random ones, three styles (`G`: classic escape time, silky stripe-average ribbons, and orbit traps that light up the inside too), color cycling, smooth or banded coloring, 3D lighting, edge ink, and a retro VGA mode.
+- Changing type, Julia set or spot crossfades from the old picture; the browser's Back and Forward buttons step through your jumps. `Z` toggles fullscreen.
+- Installable as an app, and it works offline after the first visit (service worker; not on the dev server).
 - Progressive refinement with 2× anti-aliasing when the view is still, PNG export, and shareable URL links.
 - **RENDER VIDEO / IMAGE** (`V`): pick an output size (window, 720p, 1080p, 1440p, 4K, square, 4:5, 9:16). A dashed frame shows the part of the view that gets saved; render any journey (or a dive to the current view) as a video, or save the view as a PNG at that size.
 
 Link straight to a journey with `#fly=<name>`, for example https://gh.tschieber.de/fraczilla/#fly=the-abyss. Add `&hq=1` to prerender it in full quality first: the dive is rendered as anti-aliased keyframes one octave apart, composed into a 60 fps WebM video (WebCodecs) and played back; the video can be saved. The **SHARE DIVE TO HERE** button copies a link that replays a dive from the overview to the current view, with the current colors.
 
-Serve the folder statically (for example `python3 -m http.server`) and open `index.html`. Press `H` in the app for the key list.
+Serve the folder statically, for example with `python3 tools/serve.py` (no caching, port 8000), and open it. Press `H` in the app for the key list.
 
 Before deploying, run `python3 tools/stamp.py`: it version-stamps the asset URLs so browsers never mix cached old modules with new ones.

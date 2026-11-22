@@ -271,3 +271,9 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 18px; background: var
 #jpvC { font-size: 16px; color: var(--yellow); padding: 0 6px; white-space: nowrap; }
 .btn:disabled { opacity: .45; cursor: default; }
 @media (pointer: coarse) { #jpvRow { display: none; } }
+
+/* the system asked for less motion */
+@media (prefers-reduced-motion: reduce) {
+  .splash-hint { animation: none; }
+  #caption, #splash, #toast { transition: none; }
+}

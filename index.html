@@ -9,7 +9,10 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=11898f0f">
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#0000aa">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<link rel="stylesheet" href="css/style.css?v=4f69fb34">
 </head>
 <body>
 <canvas id="c"></canvas>
@@ -86,6 +89,9 @@
       <button id="cycleBtn" class="btn" title="C">⟳ CYCLE <kbd>C</kbd></button>
       <button id="retroBtn" class="btn" title="R">RETRO</button>
     </div>
+    <div class="row"><label>STYLE <kbd>G</kbd></label>
+      <select id="style" title="G: how the colors follow the fractal"><option value="0">CLASSIC</option><option value="1">STRIPES</option><option value="2">ORBIT TRAP</option></select>
+    </div>
     <div class="row"><label>CYCLE SPEED</label><input id="cycleSpeed" type="range" min="-120" max="120" step="1" value="30"></div>
     <div class="row"><label>DENSITY</label><input id="density" type="range" min="-4" max="4" step="0.01" value="0"></div>
   </div>
@@ -114,7 +120,8 @@
   <div class="box">
     <div class="box-title">VIEW</div>
     <div class="row">
-      <button id="linkBtn" class="btn wide" title="L">COPY LINK <kbd>L</kbd></button>
+      <button id="linkBtn" class="btn" title="L">COPY LINK <kbd>L</kbd></button>
+      <button id="fsBtn" class="btn" title="Z">⛶ FULLSCREEN <kbd>Z</kbd></button>
     </div>
     <div class="row">
       <button id="resetBtn" class="btn" title="Home">RESET <kbd>HOME</kbd></button>
@@ -142,12 +149,15 @@
       <tr><td>[ / ]</td><td>color density</td></tr>
       <tr><td>, / .</td><td>fewer / more iterations</td></tr>
       <tr><td>F</td><td>browse all fractal types</td></tr>
+      <tr><td>G</td><td>coloring style: classic, stripes, orbit trap</td></tr>
       <tr><td>B</td><td>smooth ⇄ banded colors</td></tr>
       <tr><td>D</td><td>3D lighting on/off</td></tr>
       <tr><td>R</td><td>retro mode (VGA palette, banded)</td></tr>
       <tr><td>ARROWS, PGUP/PGDN</td><td>pan, zoom</td></tr>
       <tr><td>S / L</td><td>save the view as PNG (at the RENDER panel size) / copy link to this view</td></tr>
       <tr><td>V</td><td>render a video or image at a chosen size</td></tr>
+      <tr><td>Z</td><td>fullscreen on/off</td></tr>
+      <tr><td>BACK / FORWARD</td><td>browser buttons step through your jumps</td></tr>
       <tr><td>HOME</td><td>reset view</td></tr>
       <tr><td>TAB / H</td><td>toggle panel / this help</td></tr>
     </table>
@@ -208,6 +218,10 @@
 <div id="caption" aria-live="polite"><b></b><span></span></div>
 <div id="error" class="modal hidden"><div class="box modal-box"><div class="box-title">ERROR</div><p id="errorMsg"></p></div></div>
 
-<script type="module" src="js/main.js?v=11898f0f"></script>
+<script type="module" src="js/main.js?v=4f69fb34"></script>
+<script>
+  // installable and offline-capable (not on the dev server, where it would serve stale modules)
+  if ('serviceWorker' in navigator && !/(^|\.)localhost$|^127\./.test(location.hostname)) navigator.serviceWorker.register('./sw.js?v=4f69fb34').catch(() => {});
+</script>
 </body>
 </html>
