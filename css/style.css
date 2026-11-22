@@ -237,6 +237,20 @@ input[type=range]::-moz-range-thumb { width: 12px; height: 18px; background: var
 #frameLabel { position: absolute; top: 4px; left: 6px; color: #ffff55; background: #000a; padding: 0 4px; font-size: 18px; }
 
 /* Julia highlights in the journey list */
+.tabs { display: flex; gap: 6px; margin: 0 0 8px; }
+.tab { flex: 1; font: inherit; cursor: pointer; padding: 1px 0; background: transparent; color: var(--gray); border: 2px solid var(--cyan-dk); }
+.tab:hover { color: var(--white); }
+.tab.on { background: var(--cyan-dk); color: var(--black); }
+.fav-form input { flex: 1; min-width: 0; font: inherit; background: var(--black); color: var(--yellow); border: 2px solid var(--cyan); padding: 0 6px; }
+.list .fav { display: flex; align-items: center; }
+.list .fav > button.fgo { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.list .fav .acts { display: none; flex: none; }
+.list .fav:hover .acts, .list .fav:focus-within .acts { display: flex; }
+.list .fav .act { width: auto; padding: 0 4px; color: var(--cyan); }
+.list .fav .act::before, .list .fav .act:hover::before { content: none; }
+.list .fav input { flex: 1; min-width: 0; font: inherit; background: var(--black); color: var(--yellow); border: 1px solid var(--cyan); }
+.list .undo { color: var(--yellow); }
+@media (pointer: coarse) { .list .fav .acts { display: flex; } }
 .list .lhead { color: var(--cyan); font-size: .8em; margin: 6px 0 1px; letter-spacing: .05em; }
 .list .lhead:first-child { margin-top: 0; }
 .list button .jbadge {

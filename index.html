@@ -9,7 +9,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=VT323&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="css/style.css?v=f5daea63">
+<link rel="stylesheet" href="css/style.css?v=ffbb1960">
 </head>
 <body>
 <canvas id="c"></canvas>
@@ -50,7 +50,25 @@
 
   <div class="box">
     <div class="box-title">JOURNEYS</div>
+    <div class="tabs" role="tablist">
+      <button id="tabCur" class="tab on" role="tab">CURATED</button>
+      <button id="tabMine" class="tab" role="tab" title="Your saved views (M saves the current one)">★ MINE</button>
+    </div>
     <div id="locations" class="list"></div>
+    <div id="mine" class="hidden">
+      <div class="row"><button id="favSave" class="btn wide" title="M: save the current view, with its colors">★ SAVE THIS VIEW <kbd>M</kbd></button></div>
+      <div id="favForm" class="row fav-form hidden">
+        <input id="favInput" type="text" maxlength="60" spellcheck="false" autocomplete="off" aria-label="Name for this view">
+        <button id="favOk" class="btn">SAVE</button>
+      </div>
+      <div id="favList" class="list"></div>
+      <p id="favEmpty" class="small dim">Nothing saved yet. Find a view you like and press M. Saved views stay in this browser only; EXPORT keeps a copy.</p>
+      <div class="row">
+        <button id="favExport" class="btn" title="Download all saved views as a .json file">⬇ EXPORT</button>
+        <button id="favImport" class="btn" title="Add saved views from a .json file">⬆ IMPORT</button>
+        <input id="favFile" type="file" accept=".json,application/json" hidden>
+      </div>
+    </div>
     <div class="row"><button id="tourBtn" class="btn wide" title="A: a lean-back tour of the best spots of every type">▶ TOUR <kbd>A</kbd></button></div>
     <div class="row"><button id="renderBtn" class="btn wide" title="V: render a full-quality video or image at a chosen size">🎬 RENDER VIDEO / IMAGE <kbd>V</kbd></button></div>
     <div class="row">
@@ -117,6 +135,7 @@
       <tr><td>J</td><td>live Julia preview of the point under the mouse</td></tr>
       <tr><td>A</td><td>tour: a lean-back show of the best spots (any zoom or drag ends it)</td></tr>
       <tr><td>T</td><td>fly to the next journey destination</td></tr>
+      <tr><td>M</td><td>save this view to ★ MINE (name it, ENTER saves)</td></tr>
       <tr><td>C</td><td>color cycling on/off</td></tr>
       <tr><td>+ / −</td><td>cycling speed &amp; direction</td></tr>
       <tr><td>P / SHIFT+P</td><td>next palette / random palette</td></tr>
@@ -189,6 +208,6 @@
 <div id="caption" aria-live="polite"><b></b><span></span></div>
 <div id="error" class="modal hidden"><div class="box modal-box"><div class="box-title">ERROR</div><p id="errorMsg"></p></div></div>
 
-<script type="module" src="js/main.js?v=f5daea63"></script>
+<script type="module" src="js/main.js?v=ffbb1960"></script>
 </body>
 </html>
