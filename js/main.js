@@ -1,10 +1,10 @@
-import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=ffbb1960';
-import { PALETTES, randomPalette } from './palettes.js?v=ffbb1960';
-import { LOCATIONS, START } from './locations.js?v=ffbb1960';
-import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=ffbb1960';
-import { FRACTALS, FAMILIES } from './fractals.js?v=ffbb1960';
-import { muxWebM } from './webm.js?v=ffbb1960';
-import { asciiLogoSVG } from './logo.js?v=ffbb1960';
+import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=11898f0f';
+import { PALETTES, randomPalette } from './palettes.js?v=11898f0f';
+import { LOCATIONS, START } from './locations.js?v=11898f0f';
+import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=11898f0f';
+import { FRACTALS, FAMILIES } from './fractals.js?v=11898f0f';
+import { muxWebM } from './webm.js?v=11898f0f';
+import { asciiLogoSVG } from './logo.js?v=11898f0f';
 
 const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
@@ -62,7 +62,7 @@ function maxIter() {
 let worker, ref = null, pend = null, reqId = 0;
 function startWorker() {
   if (worker) worker.terminate();
-  worker = new Worker(new URL('./refworker.js?v=ffbb1960', import.meta.url));
+  worker = new Worker(new URL('./refworker.js?v=11898f0f', import.meta.url));
   worker.onmessage = (e) => {
     const m = e.data;
     if (!pend || m.id !== pend.id) return;
@@ -992,7 +992,11 @@ window.addEventListener('keydown', (e) => {
   }
   switch (k) {
     case ' ': toggleJulia(mouse?.x, mouse?.y); break;
-    case 'j': case 'J': setJuliaPreview(!jpv.on); break;
+    case 'j': case 'J':
+      if (S.julia) toast('JULIA PREVIEW works on the c-plane: SPACE goes back there');
+      else if (S.f.julia === false) toast(`${S.f.name} HAS NO JULIA MODE`);
+      else setJuliaPreview(!jpv.on);
+      break;
     case 'a': case 'A': tour.on ? stopTour() : startTour(); break;
     case 'm': case 'M': openSaveFav(); break;
     case 't': case 'T': { const js = currentJourneys(); goLocation(js[(locIdx = (locIdx + 1) % js.length)]); } break;
@@ -1281,8 +1285,10 @@ function syncUI() {
   $('#typeNow').textContent = S.f.quick ? '' : `NOW: ${S.f.name} · ${fam ? fam.name.toLowerCase() : ''}`;
   document.querySelectorAll('#palettes .pal').forEach((b, i) => b.classList.toggle('on', i === S.pal));
   $('#juliaBtn').classList.toggle('on', S.julia);
-  $('#jpvBtn').classList.toggle('on', jpv.on);
-  $('#jpvBtn').disabled = S.f.julia === false;
+  $('#jpvBtn').classList.toggle('on', jpv.on && !S.julia);
+  // the preview shows Julia sets of points in the c-plane: nothing to preview inside a Julia set
+  $('#jpvBtn').disabled = S.f.julia === false || S.julia;
+  $('#jpvBtn').title = S.julia ? 'Julia preview works on the c-plane (SPACE goes back there)' : 'J: show the Julia set of the point under the mouse';
   const jc = $('#juliaC');
   jc.textContent = S.julia ? `c = ${fmtC(S.jx, S.jy, 8)}  ✎` : (S.f.julia === false ? '' : matchMedia('(pointer: coarse)').matches ? 'MANDEL ⇄ JULIA opens the Julia set at the centre' : 'SPACE over any point opens its Julia set');
   jc.classList.toggle('editable', S.julia);
@@ -1827,7 +1833,7 @@ function typeKeys(e) {
 }
 
 function thumbOrbit(f, maxIter) {
-  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=ffbb1960', import.meta.url));
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=11898f0f', import.meta.url));
   return new Promise((resolve) => {
     const id = Math.random();
     thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };
@@ -1845,7 +1851,7 @@ let picWorker = null;
 const picWait = new Map();
 function picOrbit(f, julia, cx, cy, jx, jy, F, maxIter) {
   if (!picWorker) {
-    picWorker = new Worker(new URL('./refworker.js?v=ffbb1960', import.meta.url));
+    picWorker = new Worker(new URL('./refworker.js?v=11898f0f', import.meta.url));
     picWorker.onmessage = (e) => { const r = picWait.get(e.data.id); if (r) { picWait.delete(e.data.id); r(e.data); } };
   }
   return new Promise((resolve) => {
