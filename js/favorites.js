@@ -1,9 +1,9 @@
 // Saved views (★ MINE): capture, name, list, rename, delete with undo, links, export/import.
-import { formatFixed, parseFixed, toDouble } from './bigfixed.js?v=5ec78ad7';
-import { LOCATIONS } from './locations.js?v=5ec78ad7';
-import { PALETTES } from './palettes.js?v=5ec78ad7';
-import { FORMULAS, HOME_SCALE, S, canvas, coordDigits, goLocation, juliaHome, phoneClosePanel, syncUI, toast } from './main.js?v=5ec78ad7';
-import { stopTour } from './tour.js?v=5ec78ad7';
+import { formatFixed, parseFixed, toDouble } from './bigfixed.js?v=6c511792';
+import { LOCATIONS } from './locations.js?v=6c511792';
+import { PALETTES } from './palettes.js?v=6c511792';
+import { FORMULAS, HOME_SCALE, S, canvas, coordDigits, goLocation, juliaHome, phoneClosePanel, syncUI, toast } from './main.js?v=6c511792';
+import { stopTour } from './tour.js?v=6c511792';
 
 const $ = (s) => document.querySelector(s);
 

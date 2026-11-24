@@ -16,6 +16,11 @@ export const LOCATIONS = [
   { name: 'Micro-Mandelbrot', f: 'mandelbrot', x: '-0.743641531', y: '0.131825100', s: 0.0000154824 },
   { name: 'Coral Reef', f: 'mandelbrot', x: '-1.768778833', y: '-0.001738996', s: 0.00000003 },
   { name: 'The Abyss (10^28)', f: 'mandelbrot', x: '-0.743643887037158704752191506114774', y: '0.131825904205311970493132056385139', s: 2e-28 },
+  // computed: nuclei of period-5345 and period-3122 minibrots (Newton on z_p(c) = 0), and a
+  // Misiurewicz point (z_25 = z_24) whose spiral shrinks only 4% per turn
+  { name: 'Elephant Halo (10^28)', f: 'mandelbrot', x: '0.292470213832878178726727778167928117290941', y: '0.014886690082977249448951432899611297165260', s: 3.5e-28 },
+  { name: 'Seahorse Halo (10^21)', f: 'mandelbrot', x: '-0.7453083811389559703877540694908622292435', y: '0.1126067826821987453612338665997619004567', s: 3e-21 },
+  { name: 'Endless Spiral', f: 'mandelbrot', x: '-0.775683768009053797469483503934741045728246', y: '0.136467368294690124733274409617848765197772', s: 1e-20 },
   { name: 'Douady Rabbit', f: 'mandelbrot', jx: '-0.123', jy: '0.745', x: '0', y: '0', s: 1.25, pal: 'Glacier' },
   { name: 'Fire Dragon', f: 'mandelbrot', jx: '-0.8', jy: '0.156', x: '0', y: '0', s: 1.1, pal: 'Inferno' },
   { name: 'Galaxies', f: 'mandelbrot', jx: '-0.7269', jy: '0.1889', x: '0', y: '0', s: 1.1, pal: 'Inferno' },

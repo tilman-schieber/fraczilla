@@ -1,8 +1,8 @@
 // Full-quality output: prerendered journeys as WebM video, and the render panel (sizes, frame, images).
-import { muxWebM } from './webm.js?v=5ec78ad7';
-import { favs } from './favorites.js?v=5ec78ad7';
-import { R, S, colorParams, cssH, cssW, currentJourneys, fullDone, fullVer, homeScale, invalidate, lowVer, pend, probedVer, ref, refKey, resize, slug, stopMotion, syncUI, toast, viewVer } from './main.js?v=5ec78ad7';
-import { stopTour } from './tour.js?v=5ec78ad7';
+import { muxWebM } from './webm.js?v=6c511792';
+import { favs } from './favorites.js?v=6c511792';
+import { R, S, colorParams, cssH, cssW, currentJourneys, fullDone, fullVer, homeScale, invalidate, lowVer, pend, probedVer, ref, refKey, resize, slug, stopMotion, syncUI, toast, viewVer } from './main.js?v=6c511792';
+import { stopTour } from './tour.js?v=6c511792';
 
 const $ = (s) => document.querySelector(s);
 

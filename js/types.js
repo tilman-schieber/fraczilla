@@ -1,11 +1,11 @@
 // The type browser (F): cards with live thumbnails, search and keyboard navigation.
-import { parseFixed } from './bigfixed.js?v=5ec78ad7';
-import { FAMILIES } from './fractals.js?v=5ec78ad7';
-import { LOCATIONS } from './locations.js?v=5ec78ad7';
-import { PALETTES } from './palettes.js?v=5ec78ad7';
-import { picture } from './jpreview.js?v=5ec78ad7';
-import { BAIL, FORMULAS, R, S, canvas, colorParams, crossfade, hideSplash, maxIter, phoneClosePanel, pushHistory, retroSaved, seqBits, setFormula, styleOf, toast } from './main.js?v=5ec78ad7';
-import { stopTour } from './tour.js?v=5ec78ad7';
+import { parseFixed } from './bigfixed.js?v=6c511792';
+import { FAMILIES } from './fractals.js?v=6c511792';
+import { LOCATIONS } from './locations.js?v=6c511792';
+import { PALETTES } from './palettes.js?v=6c511792';
+import { picture } from './jpreview.js?v=6c511792';
+import { BAIL, FORMULAS, R, S, canvas, colorParams, crossfade, hideSplash, maxIter, phoneClosePanel, pushHistory, retroSaved, seqBits, setFormula, styleOf, toast } from './main.js?v=6c511792';
+import { stopTour } from './tour.js?v=6c511792';
 
 const $ = (s) => document.querySelector(s);
 
@@ -119,7 +119,7 @@ function typeKeys(e) {
 }
 
 function thumbOrbit(f, maxIter) {
-  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=5ec78ad7', import.meta.url));
+  if (!thumbWorker) thumbWorker = new Worker(new URL('./refworker.js?v=6c511792', import.meta.url));
   return new Promise((resolve) => {
     const id = Math.random();
     thumbWorker.onmessage = (e) => { if (e.data.id === id) resolve(e.data); };

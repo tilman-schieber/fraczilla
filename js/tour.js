@@ -1,9 +1,9 @@
 // The lean-back tour (A): curated spots of every type, or your saved views, one after another.
-import { parseFixed } from './bigfixed.js?v=5ec78ad7';
-import { LOCATIONS } from './locations.js?v=5ec78ad7';
-import { favLoc, favs, jTab } from './favorites.js?v=5ec78ad7';
-import { R, S, anim, flyTo, fullDone, fullVer, goLocation, hideSplash, juliaHome, lowVer, pend, reduceMotion, ref, refKey, syncUI, toast, viewVer } from './main.js?v=5ec78ad7';
-import { closeRender, hq } from './render.js?v=5ec78ad7';
+import { parseFixed } from './bigfixed.js?v=6c511792';
+import { LOCATIONS } from './locations.js?v=6c511792';
+import { favLoc, favs, jTab } from './favorites.js?v=6c511792';
+import { R, S, anim, flyTo, fullDone, fullVer, goLocation, hideSplash, juliaHome, lowVer, pend, reduceMotion, ref, refKey, syncUI, toast, viewVer } from './main.js?v=6c511792';
+import { closeRender, hq } from './render.js?v=6c511792';
 
 const $ = (s) => document.querySelector(s);
 

@@ -1,14 +1,14 @@
-import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=5ec78ad7';
-import { PALETTES, randomPalette } from './palettes.js?v=5ec78ad7';
-import { LOCATIONS, START } from './locations.js?v=5ec78ad7';
-import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=5ec78ad7';
-import { FRACTALS, FAMILIES } from './fractals.js?v=5ec78ad7';
-import { asciiLogoSVG } from './logo.js?v=5ec78ad7';
-import { b64, bindFavs, cleanFav, favLoc, favs, jTab, openSaveFav } from './favorites.js?v=5ec78ad7';
-import { jpv, picture, setJuliaPreview, stepJuliaPreview } from './jpreview.js?v=5ec78ad7';
-import { FPS, OUTS, cancelHQ, closeRender, hq, lastVideo, movie, movieVideo, openRender, outOverride, prerenderJourney, renderImage, renderOpen, saveVideo, updateFrame } from './render.js?v=5ec78ad7';
-import { TOUR_KEEPS, startTour, stepTour, stopTour, tour } from './tour.js?v=5ec78ad7';
-import { buildTypeBrowser, closeTypes, openTypes, typesOpen } from './types.js?v=5ec78ad7';
+import { FB, fromDouble, toDouble, parseFixed, formatFixed } from './bigfixed.js?v=6c511792';
+import { PALETTES, randomPalette } from './palettes.js?v=6c511792';
+import { LOCATIONS, START } from './locations.js?v=6c511792';
+import { Renderer, PROBE_MAXW, PROBE_H } from './renderer.js?v=6c511792';
+import { FRACTALS, FAMILIES } from './fractals.js?v=6c511792';
+import { asciiLogoSVG } from './logo.js?v=6c511792';
+import { b64, bindFavs, cleanFav, favLoc, favs, jTab, openSaveFav } from './favorites.js?v=6c511792';
+import { jpv, picture, setJuliaPreview, stepJuliaPreview } from './jpreview.js?v=6c511792';
+import { FPS, OUTS, cancelHQ, closeRender, hq, lastVideo, movie, movieVideo, openRender, outOverride, prerenderJourney, renderImage, renderOpen, saveVideo, updateFrame } from './render.js?v=6c511792';
+import { TOUR_KEEPS, startTour, stepTour, stopTour, tour } from './tour.js?v=6c511792';
+import { buildTypeBrowser, closeTypes, openTypes, typesOpen } from './types.js?v=6c511792';
 
 export const FORMULAS = FRACTALS;
 const JULIA_SCALE = 1.6;
@@ -70,7 +70,7 @@ export function maxIter() {
 export let worker, ref = null, pend = null, reqId = 0;
 function startWorker() {
   if (worker) worker.terminate();
-  worker = new Worker(new URL('./refworker.js?v=5ec78ad7', import.meta.url));
+  worker = new Worker(new URL('./refworker.js?v=6c511792', import.meta.url));
   worker.onmessage = (e) => {
     const m = e.data;
     if (!pend || m.id !== pend.id) return;

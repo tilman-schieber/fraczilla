@@ -1,9 +1,9 @@
 // Offscreen pictures of any view, and the live Julia preview (J) next to the mouse.
-import { FB, fromDouble, parseFixed, toDouble } from './bigfixed.js?v=5ec78ad7';
-import { BAIL, HOME_SCALE, R, S, anim, colorParams, cssH, cssW, fmtC, juliaHome, maxIter, mouse, pal, pointers, screenOffset, seqBits, styleOf, syncUI, toast, viewVer } from './main.js?v=5ec78ad7';
-import { hq, renderOpen } from './render.js?v=5ec78ad7';
-import { tour } from './tour.js?v=5ec78ad7';
-import { typesOpen } from './types.js?v=5ec78ad7';
+import { FB, fromDouble, parseFixed, toDouble } from './bigfixed.js?v=6c511792';
+import { BAIL, HOME_SCALE, R, S, anim, colorParams, cssH, cssW, fmtC, juliaHome, maxIter, mouse, pal, pointers, screenOffset, seqBits, styleOf, syncUI, toast, viewVer } from './main.js?v=6c511792';
+import { hq, renderOpen } from './render.js?v=6c511792';
+import { tour } from './tour.js?v=6c511792';
+import { typesOpen } from './types.js?v=6c511792';
 
 const $ = (s) => document.querySelector(s);
 
@@ -14,7 +14,7 @@ let picWorker = null;
 const picWait = new Map();
 function picOrbit(f, julia, cx, cy, jx, jy, F, maxIter) {
   if (!picWorker) {
-    picWorker = new Worker(new URL('./refworker.js?v=5ec78ad7', import.meta.url));
+    picWorker = new Worker(new URL('./refworker.js?v=6c511792', import.meta.url));
     picWorker.onmessage = (e) => { const r = picWait.get(e.data.id); if (r) { picWait.delete(e.data.id); r(e.data); } };
   }
   return new Promise((resolve) => {
